@@ -1,0 +1,45 @@
+# Compiles the runtime and its shaders on every push, against ci/tiny_gen: a generated set the recompiler made from a tiny test
+# program of our own (ci/README.md). Nothing here touches a game: the repository holds no game code and the runner has no disc.
+name: build
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  runtime:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            diffutils
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-sdl3
+            mingw-w64-ucrt-x86_64-vulkan-headers
+            mingw-w64-ucrt-x86_64-vulkan-loader
+            mingw-w64-ucrt-x86_64-shaderc
+            mingw-w64-ucrt-x86_64-openxr-sdk
+            mingw-w64-ucrt-x86_64-python
+      - name: The checked-in set is what the recompiler makes
+        run: |
+          python ci/make_tiny_elf.py build_ci_tiny.elf
+          PYTHONPATH=tools python -m ps2recomp build_ci_tiny.elf -o build_ci_regen
+          diff -r --strip-trailing-cr ci/tiny_gen build_ci_regen
+      - name: Configure
+        run: cmake -S . -B build/ci -G Ninja -DCMAKE_BUILD_TYPE=Release -DPS2_GENERATED_DIR=ci/tiny_gen
+      - name: Build the runtime and the shaders
+        run: cmake --build build/ci --target ac5

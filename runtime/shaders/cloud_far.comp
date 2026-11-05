@@ -1,0 +1,406 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+#extension GL_EXT_control_flow_attributes : require
+/* cloud_far.comp - S2 far cloud renderer (CLOUDS_3D_RESEARCH_2026-10-20.md 8.1/8.2): marches the cloud layer once from
+   the centre eye into the direction map cloud_dir (C3: RGBA16F, full-sphere octahedral; rgb = premultiplied
+   in-scatter, a = transmittance) and cloud_dir_depth (R16F: transmittance-weighted mean distance, m; 65504 = none).
+   Both eyes sample the map in the composite (S4), so they cannot disagree and head rotation needs no update.
+
+   Passes (one source, compiled with -DPASS_x; ps2_clouds_far.c records them):
+     PASS_WEATHER  the weather window (C3 weather, 512^2 toroidal around the eye): the splat of the game's cloud list
+                   (C1 cloud[], noise-displaced ellipsoid blobs; the primary path) or the procedural field from C1
+                   coverage (fallback). Run when the eye moves by a weather texel or C1 list_seq changes.
+     PASS_WSOFT    (after the splat) the density softened across the borders between clouds (ACZ_VR_CLOUD_SPLAT_SOFT)
+     PASS_TILES    per 8x8-texel tile: re-march this frame? The angular error of its content since its last march
+                   (camera translation in the cloud frame / distance of the nearest cloud in the tile and its
+                   neighbours, in eye pixels), a refresh every FAR_SLICE frames (staggered), visibility (tiles outside
+                   both eyes' views get looser limits), reachability of the band -> 3 priority lists
+     PASS_ARGS     indirect dispatch size (optional cap on tiles per frame)
+     PASS_MARCH    one workgroup per listed tile; records the camera and the nearest cloud hit per tile
+   The march itself is in cloud_far.glsl. */
+#define CL_STORAGE
+#include "cloud_common.glsl"
+#include "cloud_far.glsl"
+
+/* per tile: cam.xyz = the eye in the scheduler's anchor frame at the last march, cam.w = nearest cloud hit in the
+   tile (m); st.x = frame of the last march (0xFFFFFFFF = never), st.y = bit 0: band reachable at the last march,
+   bits 16..31: the tile's largest luminance step between neighbouring texels (x 65535; over the sky colour),
+   st.z = reachable now, st.w = generation (a different one = never: rebase, re-anchor, reset) */
+struct ClTile { vec4 cam; uvec4 st; };
+layout(set = 1, binding = 1, std430) buffer ClTiles { ClTile tiles[]; };
+/* cnt[0..2] = entries in the three priority lists (0 must, 1 visible, 2 outside the view), cnt[3] = tiles marched;
+   args = vkCmdDispatchIndirect arguments; list = 3 lists of NT entries each */
+layout(set = 1, binding = 2, std430) buffer ClList { uint cnt[4]; uint args[4]; uint list[]; };
+
+layout(push_constant) uniform ClFarPC {
+    vec4 cam;     /* xyz the centre eye in the anchor frame (m; tiles compare against it), w march start (m) */
+    vec4 march;   /* x max distance (m), y min step (m), z step growth (step >= z * t), w eye pixels per radian */
+    vec4 sched;   /* x error threshold (eye px), y FAR_SLICE (frames), z max tiles per frame (0 = all),
+                     w 1 = the near field covers 0 .. cam.w (the far content shows only through its transmittance) */
+    uvec4 fr;     /* x frame, y the map's used size N_eff (<= the image; the composite scales its uv by N_eff / N),
+                     z tiles per row (N_eff / 8), w bit 0 = march every tile, bits 1..8 = step cap (0 = cl.cfg.x),
+                     bits 9.. generation */
+} pc;
+
+#if defined(PASS_WEATHER)
+/* C1 cloud[] for the splat: pos_r = x, z relative to the eye (cloud space, m; the copy nearest the eye), y altitude
+   (m), w horizontal semi-axis R of the body (C1 radius_m); info.x = variant, info.y = opacity (C1 opacity x
+   (1 - transp), eased across list changes), info.z = vertical semi-axis (C1 height_m; 0 = R x spl.x), info.w = the
+   cloud's seed for its envelope puffs (an integer < 2^24, stable while the cloud stays in the list; 0 = none).
+   hdr.x = count, hdr.y = list period (m, float bits; 0 = none), hdr.z = 1: the cloud-list path even with no cloud
+   (ACZ_VR_CLOUD_LIST_KEEP: an empty list is clear sky, not the procedural field). */
+struct ClCloud { vec4 pos_r; vec4 info; };
+layout(set = 1, binding = 3, std430) readonly buffer ClClouds { uvec4 hdr; ClCloud cloud[]; };
+layout(local_size_x = 8, local_size_y = 8) in;
+uint env_hash(uint x) { x ^= x >> 16; x *= 0x7feb352du; x ^= x >> 15; x *= 0x846ca68bu; x ^= x >> 16; return x; }
+vec4 env_rand4(uint s) {
+    return vec4(env_hash(s), env_hash(s ^ 0x9e3779b9u), env_hash(s ^ 0x85ebca6bu), env_hash(s ^ 0xc2b2ae35u)) / 4294967296.0;
+}
+/* one listed cloud at the texel's position p: false outside its cut-off disc; else cv = its horizontal profile, lo /
+   hi = its column (m; the base from the ellipsoid chord, the top under its billows), dk = its density from the
+   opacity, ds = its optical-depth normalisation (the splat's density is dk x ds) */
+bool wx_cloud(uint i, vec2 p, float wrap, int np, float ea, float zf, out float cv, out float lo, out float hi,
+              out float dk, out float ds) {
+    cv = 0.0; lo = 1e9; hi = -1e9; dk = 0.0; ds = 0.0;
+    vec4 c = cloud[i].pos_r;
+    vec2 dxz = p - c.xz;
+    if (wrap > 0.0) dxz -= wrap * round(dxz / wrap);                   /* nearest copy of the periodic list */
+    float rc = c.w * fp.spl.w, r2 = dot(dxz, dxz);
+    if (r2 >= rc * rc) return false;
+    float rho = sqrt(r2) / rc;                                          /* 0..1 at the cut-off radius */
+    float hc = cloud[i].info.z > 0.0 ? cloud[i].info.z * fp.spl.w : c.w * fp.spl.x;   /* chord half at the centre */
+    float hv = hc * sqrt(1.0 - rho * rho);                              /* ellipsoid chord */
+    lo = c.y - hv * fp.spl.y;
+    cv = 1.0 - smoothstep(zf, 1.0, rho);                                /* horizontal profile (the game's) */
+    if (np > 0) {
+        float rk = rho / (1.0 - 0.8 * ea);
+        float top = rk < 1.0 ? hc * sqrt(1.0 - rk * rk) : 0.0, cp = 1.0 - smoothstep(zf, 1.0, rk);
+        uint seed = cloud[i].info.w > 0.0 ? env_hash(uint(cloud[i].info.w))
+                  : env_hash(floatBitsToUint(c.w) ^ env_hash(floatBitsToUint(c.y) + uint(cloud[i].info.x)));
+        for (int j = 0; j < np; j++) {
+            vec4 h = env_rand4(seed + uint(j) * 0x632be5abu);
+            float d = 0.25 + 0.5 * sqrt(h.y), a = 6.2831853 * h.x;       /* centre: a ring 0.25 .. 0.75 */
+            float rp = rc * (0.32 + 0.18 * h.z);                         /* puff radius */
+            float q = length(dxz / rc - d * vec2(cos(a), sin(a))) * rc / rp;
+            if (q >= 1.0) continue;
+            float tp = hc * sqrt(max(1.0 - d * d, 0.0)) * (0.85 + 0.15 * h.w);   /* its dome's peak under the ellipsoid */
+            top = max(top, tp * sqrt(1.0 - q * q));
+            cp = max(cp, 1.0 - smoothstep(0.55, 1.0, q));
+        }
+        hv = min(hv, top);
+        cv = min(cv, cp);
+    }
+    hi = c.y + hv;
+    /* density so the vertical optical depth through the centre (the chord at ~0.7 density) is about fine.y */
+    ds = fp.fine.y > 0.0 ? min(1.0, fp.fine.y / (cl_extinction() * 0.7 * 2.0 * hc)) : 1.0;
+    /* the game blends a sprite at alpha = opacity; a volume's opacity is 1 - exp(-density x path): for cumulus-like
+       weather the density follows -ln(1 - 0.95 opacity) (normalised to 1 at opacity 1), so a faint cloud
+       (opacity 0.12: alpha 15 of 128) stays faint instead of a grey veil, and the opaque ones stay opaque */
+    float op = cloud[i].info.y;
+    float opv = -log(max(1.0 - 0.95 * op, 0.05)) / 2.9957;
+    dk = mix(op, opv, smoothstep(0.2, 0.6, cl.band.w));
+    return true;
+}
+void main() {
+    ivec2 id = ivec2(gl_GlobalInvocationID.xy);
+    /* the cloud-space position this texel holds: toroidal uv = wx.xy + p.xz / 20 km, the window centred on the eye */
+    vec2 p = ((vec2(id) + 0.5) / 512.0 - cl.wx.xy) * CL_WEATHER_M;
+    p -= CL_WEATHER_M * round(p / CL_WEATHER_M);
+    uint n = hdr.x;
+    if (n == 0u) {                               /* nothing listed: clear sky on the list path, else the procedural field */
+        imageStore(cl_weather_img, id, hdr.z != 0u ? vec4(0.0, 0.0, 1.0, 0.0) : cl_weather_proc(vec3(p.x, 0.0, p.y), true));
+        return;
+    }
+    float wrap = uintBitsToFloat(hdr.y);
+    float hb = cl.band.x, hr = max(cl.band.y - hb, 1.0);
+    float cov = 0.0, dens = 0.0, lo = 1e9, hi = -1e9;
+    /* the envelope's billows: a core dome of full height but 1 - 0.8 ea of the width, plus fine.w dome-topped puffs
+       around it at places hashed from the cloud's seed (info.w: the same layout every frame and on every list), their
+       peaks following the ellipsoid down toward the rim (a mound of turrets), all inside the ellipsoid (the C1 band
+       still holds the body; the covered area shrinks ~10 %). Without them the bodies are smooth ellipsoids that the
+       volume noise only frays (E: lozenges). Cumulus only (C1 type >= 0.6 fully, M3 1.0): the pass then costs 0.051
+       instead of 0.042 ms with M3's 36 clouds (3090 Ti); the overcast slab (type <= 0.2, M1 0.004) stays smooth, and
+       its ~100-cloud list would cost the pass over 2x (0.12 ms without puffs). */
+    float ea = fp.fine.z * smoothstep(0.2, 0.6, cl.band.w);
+    int np = ea > 0.0 ? int(fp.fine.w) : 0;
+    float zf = fp.spl.z / fp.spl.w;
+    float cv, l, h, dk, ds;
+    if (fp.ext.z > 0.5) {
+        /* ACZ_VR_CLOUD_SPLAT_MIX (bugs #33 / #40, 2026-10-22). Before: the texel took the coverage and density of the
+           cloud with the largest horizontal profile whatever its opacity, and the union of the columns of EVERY cloud
+           whose disc covers it, down to a point at its rim. So a faint or fading cloud (S1 lists clouds from opacity
+           0.1; M2 118 and M1 9405 overlapping faint/dense pairs) that is wider than a dense one replaced the dense one's
+           density there (the dense cloud vanished, and reappeared at once when the faint one left the list), and any
+           cloud's column, even at its rim, stretched the dense cloud's body up or down to its own top or base: walls
+           along the faint cloud's disc edge, flat lids = "a very rectangular cloud", "a loaf of bread".
+           Now: a cloud's coverage c = cv x min(1, dk / 0.05) (vanishes as it fades out); coverage = max c (no cloud
+           thins another); density = the 4-norm of the clouds' expected densities E = c dk ds over that coverage (one
+           cloud: its own density, as before; a dense cloud inside a faint one keeps its density; k equal clouds
+           overlapping fully give k^(1/4) x); and a cloud's column counts as far as its strength s = c dk relative to the
+           strongest at the texel, u = smoothstep(0.25, 1, s / s_max): its base raised and its top lowered by (1 - u)
+           band thicknesses (clamped to the band first), so a faint cloud does not stretch a dense one. Every term is
+           continuous in the opacities and positions: a cloud fading in or out, or two clouds trading places as the
+           strongest, change the map gradually. */
+        float smax = 0.0;
+        for (uint i = 0u; i < n; i++)
+            if (wx_cloud(i, p, wrap, np, ea, zf, cv, l, h, dk, ds)) smax = max(smax, cv * clamp(dk / 0.05, 0.0, 1.0) * dk);
+        float e4 = 0.0;
+        if (smax > 0.0)
+            for (uint i = 0u; i < n; i++) {
+                if (!wx_cloud(i, p, wrap, np, ea, zf, cv, l, h, dk, ds)) continue;
+                float c = cv * clamp(dk / 0.05, 0.0, 1.0);
+                if (c <= 0.0) continue;
+                cov = max(cov, c);
+                float E = c * dk * ds; E *= E; e4 += E * E;
+                float u = smoothstep(0.25, 1.0, c * dk / smax);
+                if (u <= 0.0) continue;
+                lo = min(lo, clamp(l, hb, hb + hr) + (1.0 - u) * hr);
+                hi = max(hi, clamp(h, hb, hb + hr) - (1.0 - u) * hr);
+            }
+        dens = cov > 0.0 ? sqrt(sqrt(e4)) / cov : 0.0;
+    } else {
+        for (uint i = 0u; i < n; i++) {        /* the splat of before (ACZ_VR_CLOUD_SPLAT_MIX=0) */
+            if (!wx_cloud(i, p, wrap, np, ea, zf, cv, l, h, dk, ds)) continue;
+            lo = min(lo, l); hi = max(hi, h);
+            if (cv > cov) { cov = cv; dens = dk * ds; }
+        }
+    }
+    vec4 o = vec4(0.0, 0.0, 1.0, 0.0);
+    /* core fill (ext.x, cumulus-like weather): R below 1 makes the density's noise remap cut holes inside the bodies */
+    float fillk = mix(1.0, fp.ext.x > 0.0 ? fp.ext.x : 1.0, smoothstep(0.2, 0.6, cl.band.w));
+    if (cov > 0.0) o = vec4(cov * fillk, clamp((lo - hb) / hr, 0.0, 1.0), clamp((hi - hb) / hr, 0.0, 1.0), cl_wx_enc(dens));
+    imageStore(cl_weather_img, id, o);
+}
+
+#elif defined(PASS_WSOFT)
+/* The splat's density softened across the borders between clouds (bug #31; ACZ_VR_CLOUD_SPLAT_SOFT, ext.y = the radius
+   in weather texels). The splat gives each texel the density of ONE cloud -- the one with the largest horizontal
+   profile, the first in the list where several are at their full-body plateau (profile 1 inside 0.45 R) -- so where
+   a faint and an opaque cloud overlap the density jumps (M7: 0.125 next to 1.0 opacity, 25x) along the edge of a
+   plateau or the line where two profiles cross: a vertical wall in the volume, seen as a box with straight sides and
+   the band top as a flat lid. Here A is replaced by the tent-weighted mean of A over the covered texels around (a
+   normalised convolution: uncovered texels do not count, so the inside of every cloud's region and every outer rim
+   keep their density exactly; only the walls between clouds become ramps of 2 x the radius). The input is a copy of
+   the image as the splat wrote it (rgba8 texels; the image cannot be read and rewritten in place by other groups). */
+layout(set = 1, binding = 6, std430) readonly buffer ClWxCopy { uint wxc[]; };
+layout(local_size_x = 16, local_size_y = 16) in;
+#define WS_T 16
+#define WS_RMAX 16
+#define WS_S (WS_T + 2 * WS_RMAX)
+shared float s_a[WS_S * WS_S];          /* density x 255, -1 = uncovered */
+shared vec2 s_h[WS_S * WS_T];           /* the horizontal pass: (sum w a, sum w) per tile row and output column */
+void main() {
+    int r = clamp(int(fp.ext.y + 0.5), 0, WS_RMAX);
+    ivec2 g0 = ivec2(gl_WorkGroupID.xy) * WS_T - WS_RMAX;
+    uint li = gl_LocalInvocationIndex;
+    for (uint k = li; k < uint(WS_S * WS_S); k += 256u) {
+        ivec2 q = (g0 + ivec2(int(k) % WS_S, int(k) / WS_S)) & 511;      /* toroidal, as the window */
+        uint v = wxc[q.y * 512 + q.x];
+        float a = float(v >> 24) / 255.0;
+        if (cl.wx.w >= 15.5) a *= a;                                    /* (ACZ_VR_CLOUD_WX_SQRT: average densities) */
+        s_a[k] = (v & 0xFFu) != 0u ? a * 255.0 : -1.0;
+    }
+    barrier();
+    for (uint k = li; k < uint(WS_S * WS_T); k += 256u) {
+        int y = int(k) / WS_T, x = int(k) % WS_T + WS_RMAX;
+        vec2 acc = vec2(0.0);
+        for (int d = -r; d <= r; d++) {
+            float a = s_a[y * WS_S + x + d];
+            if (a >= 0.0) acc += float(r + 1 - abs(d)) * vec2(a, 1.0);
+        }
+        s_h[k] = acc;
+    }
+    barrier();
+    ivec2 lo = ivec2(gl_LocalInvocationID.xy), id = ivec2(gl_GlobalInvocationID.xy);
+    uint own = wxc[id.y * 512 + id.x];
+    if ((own & 0xFFu) == 0u) return;                                    /* uncovered: as the splat wrote it */
+    vec2 acc = vec2(0.0);
+    for (int d = -r; d <= r; d++) acc += float(r + 1 - abs(d)) * s_h[(lo.y + WS_RMAX + d) * WS_T + lo.x];
+    vec4 o = unpackUnorm4x8(own);
+    if (acc.y > 0.0) o.a = cl_wx_enc(acc.x / acc.y / 255.0);
+    imageStore(cl_weather_img, id, o);
+}
+
+#elif defined(PASS_TILES)
+layout(local_size_x = 64) in;
+uint tile_hash(uint x) { x ^= x >> 16; x *= 0x7feb352du; x ^= x >> 15; x *= 0x846ca68bu; x ^= x >> 16; return x; }
+bool reach_dir(vec3 d) {
+    float hb = cl.band.x, ht = cl.band.y, y0 = cl.origin.y;
+    float t0 = pc.cam.w, t1 = pc.march.x;
+    if (abs(d.y) < 1e-6) return y0 > hb && y0 < ht;
+    float ta = (hb - y0) / d.y, tb = (ht - y0) / d.y;
+    return min(t1, max(ta, tb)) > max(t0, min(ta, tb));
+}
+void main() {
+    uint tpr = pc.fr.z, NT = tpr * tpr, id = gl_GlobalInvocationID.x;
+    if (id >= NT) return;
+    ivec2 tc = ivec2(id % tpr, id / tpr);
+    float N = float(pc.fr.y);
+    uint gen = pc.fr.w >> 9;
+    bool force = (pc.fr.w & 1u) != 0u;
+    vec3 dc = cl_uv_dir((vec2(tc) * 8.0 + 4.0) / N);
+    bool reach = reach_dir(dc);
+    float crad = 0.0;
+    for (int k = 0; k < 4; k++) {
+        vec3 d = cl_uv_dir((vec2(tc) + vec2(k & 1, k >> 1)) * 8.0 / N);
+        reach = reach || reach_dir(d);
+        crad = max(crad, acos(clamp(dot(d, dc), -1.0, 1.0)));
+    }
+    ClTile me = tiles[id];
+    tiles[id].st.z = reach ? 1u : 0u;
+    bool never = me.st.x == 0xFFFFFFFFu || me.st.w != gen;
+    bool rchg = (me.st.y & 1u) != (reach ? 1u : 0u);
+    if (!force && !reach && !rchg && !never) return;               /* empty and already written as empty */
+    /* visible: inside the union of the parts of both eye images the headset shows (C2 vis, target pixels; the whole
+       image when unset; both eyes share the view axes) + a head-motion margin + the tile's radius */
+    vec4 v0 = cl.vis[0], v1 = cl.vis[1];
+    bool hv = v0.z > v0.x && v1.z > v1.x;
+    float px0 = hv ? min(v0.x, v1.x) : cl.img.x, px1 = hv ? max(v0.z, v1.z) : cl.img.x + cl.img.z;
+    float py0 = hv ? min(v0.y, v1.y) : cl.img.y, py1 = hv ? max(v0.w, v1.w) : cl.img.y + cl.img.w;
+    float m = fp.sch.z + crad;
+    float hx = atan(dot(dc, cl.cam_x.xyz), dot(dc, -cl.cam_z.xyz));            /* angle right of forward */
+    float hy = atan(dot(dc, cl.cam_y.xyz), dot(dc, -cl.cam_z.xyz));            /* angle above forward */
+    bool vis = hx > atan((px0 - cl.proj.z) / cl.proj.x) - m && hx < atan((px1 - cl.proj.z) / cl.proj.x) + m &&
+               hy < atan((cl.proj.w - py0) / cl.proj.y) + m && hy > atan((cl.proj.w - py1) / cl.proj.y) - m;
+    /* nearest cloud content and the sharpest luminance step in this tile and its 8 neighbours (content can drift in
+       from a neighbour) */
+    float dmin = me.cam.w;
+    uint gq = me.st.y >> 16;
+    for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+        ivec2 nb = clamp(tc + ivec2(i, j), ivec2(0), ivec2(int(tpr) - 1));
+        ClTile t = tiles[uint(nb.y) * tpr + uint(nb.x)];
+        dmin = min(dmin, t.cam.w);
+        gq = max(gq, t.st.y >> 16);
+    }
+    dmin = max(dmin, pc.cam.w);
+    /* angular error of the stored content since this tile's last march, in eye pixels */
+    float err = never ? 1e9 : length(cross(pc.cam.xyz - me.cam.xyz, dc)) / dmin * pc.march.w;
+    /* the pixel limit, relaxed where the content is smooth: a shift of e eye pixels changes a texel by about
+       e x (map texels per eye pixel, ~1.5 near the horizon) x the largest step; allow sch.w levels, at most 8 x */
+    float thr = pc.sched.x;
+    if (fp.sch.w > 0.0) thr = clamp(fp.sch.w / (max(float(gq) / 65535.0, 1e-5) * 255.0 * 1.5), thr, 8.0 * thr);
+    thr *= vis ? 1.0 : fp.sch.x;
+    /* behind the near field's fog (inside overcast) the map shows only through the near transmittance: estimate it
+       along the tile's centre ray (6 samples over the near range) and relax the limit and the refresh with it */
+    float tnear = 1.0;
+    if (pc.sched.w > 0.5) {
+        float hb = cl.band.x, ht = cl.band.y, y0 = cl.origin.y, a0 = 0.0, a1 = pc.cam.w;
+        if (abs(dc.y) > 1e-6) {
+            float ta = (hb - y0) / dc.y, tb = (ht - y0) / dc.y;
+            a0 = max(a0, min(ta, tb)); a1 = min(a1, max(ta, tb));
+        } else if (y0 <= hb || y0 >= ht) a1 = a0;
+        if (a1 > a0) {
+            float ds = (a1 - a0) / 6.0, od = 0.0;
+            float sg = cl_extinction();
+            for (int k = 0; k < 6; k++) od += cl_far_density(dc * (a0 + (float(k) + 0.5) * ds), false, ds) * sg * ds;
+            tnear = exp(-od);
+        }
+    }
+    thr /= max(tnear, 0.05);
+    float pstretch = clamp(1.0 / max(tnear, 0.05), 1.0, 8.0);
+    uint period = max(1u, uint(pc.sched.y * (vis ? 1.0 : fp.sch.y) * pstretch));
+    bool must = force || never || rchg || err > 2.0 * thr;
+    /* half rate (mz.w): only the must list is marched on odd frames, so the staggered refresh counts frame pairs */
+    bool hrate = fp.mz.w > 0.5;
+    uint fq = hrate ? pc.fr.x >> 1 : pc.fr.x, pq = hrate ? max(1u, period >> 1) : period;
+    bool due = must || err > thr || (reach && (fq + tile_hash(id)) % pq == 0u);
+    if (fp.dbg.x > 0.5 && vis && reach && !due) {
+        /* ACZ_DEBUG_CLOUD_FAR_STALE: what this frame shows of a tile left alone (its centre texel, marched before)
+           against a march of that texel now. list[3 NT ..]: 0 a cloud appears / vanishes (transmittance 0.95 <-> 0.75)
+           where the near fog relaxed the tile, 1 the same elsewhere, 2 / 3 a luminance step > 16 levels over the sky,
+           4 tiles checked, 5 of them relaxed by the near fog */
+        ivec2 px = tc * 8 + 4;
+        vec3 rd = cl_uv_dir((vec2(px) + 0.5) / N);
+        uint cap = (pc.fr.w >> 1) & 0xFFu;
+        ClFarP P = ClFarP(vec3(0.0), pc.cam.w, pc.march.x, int(cap != 0u ? min(float(cap), cl.cfg.x) : cl.cfg.x),
+                          pc.march.y, pc.march.z);
+        ClFarR r = cl_far_march(P, rd, cl_far_jit(vec2(px)));
+        vec4 s = imageLoad(cl_dir_img, px);
+        const vec3 lw = vec3(0.299, 0.587, 0.114);
+        float ys = dot(s.rgb, lw) + dot(cl.sky_hor.rgb, lw) * s.a, yt = dot(r.L, lw) + dot(cl.sky_hor.rgb, lw) * r.T;
+        bool rel = tnear < 0.9;
+        uint b0 = 3u * NT;
+        atomicAdd(list[b0 + 4u], 1u);
+        if (rel) atomicAdd(list[b0 + 5u], 1u);
+        if ((s.a > 0.95 && r.T < 0.75) || (s.a < 0.75 && r.T > 0.95)) atomicAdd(list[b0 + (rel ? 0u : 1u)], 1u);
+        if (abs(ys - yt) > 16.0 / 255.0) atomicAdd(list[b0 + (rel ? 2u : 3u)], 1u);
+    }
+    if (!due) return;
+    uint b = must ? 0u : (vis ? 1u : 2u);
+    uint slot = atomicAdd(cnt[b], 1u);
+    list[b * NT + slot] = id;
+}
+
+#elif defined(PASS_ARGS)
+layout(local_size_x = 1) in;
+void main() {
+    uint n = cnt[0] + cnt[1] + cnt[2];
+    uint cap = uint(pc.sched.z);
+    /* the cap: of all lists (ACZ_VR_CLOUD_FAR_CAP, or the governor with ACZ_VR_GOV_FAR_MODE=0), or with ext.w only of
+       the tiles outside both eyes' views (the governor's level 1, ACZ_VR_GOV_FAR_MODE=1: no visible tile stays stale) */
+    if (cap > 0u && (pc.fr.w & 1u) == 0u) n = fp.ext.w > 0.5 ? cnt[0] + cnt[1] + min(cnt[2], cap) : min(n, cap);
+    /* half rate: on odd frames only the must list (it comes first); the rest stays due for the next frame */
+    if (fp.mz.w > 0.5 && (pc.fr.x & 1u) == 1u && (pc.fr.w & 1u) == 0u) n = min(n, cnt[0]);
+    cnt[3] = n;
+    args[0] = n; args[1] = 1u; args[2] = 1u; args[3] = 0u;
+}
+
+#elif defined(PASS_MARCH)
+layout(local_size_x = 8, local_size_y = 8) in;
+#ifdef CL_STATS     /* cloudbench only: [0] cheap density evaluations (empty space + bisection), [1] full ones (incl.
+                       the light sample), [2] texels, [3] texels with cloud */
+layout(set = 1, binding = 4, std430) buffer ClStats { uint cl_stats[]; };
+#endif
+shared uint s_first, s_grad;
+shared float s_y[64];
+void main() {
+    uint tpr = pc.fr.z, NT = tpr * tpr, g = gl_WorkGroupID.x;
+    uint c0 = cnt[0], c1 = cnt[1];
+    uint tile = g < c0 ? list[g] : g < c0 + c1 ? list[NT + g - c0] : list[2u * NT + g - c0 - c1];
+    ivec2 px = ivec2(tile % tpr, tile / tpr) * 8 + ivec2(gl_LocalInvocationID.xy);
+    if (gl_LocalInvocationIndex == 0u) { s_first = floatBitsToUint(CL_DEPTH_NONE); s_grad = 0u; }
+    barrier();
+    vec3 rd = cl_uv_dir((vec2(px) + 0.5) / float(pc.fr.y));
+    uint cap = (pc.fr.w >> 1) & 0xFFu;
+    ClFarP P = ClFarP(vec3(0.0), pc.cam.w, pc.march.x, int(cap != 0u ? min(float(cap), cl.cfg.x) : cl.cfg.x),
+                      pc.march.y, pc.march.z);
+    ClFarR r = cl_far_march(P, rd, cl_far_jit(vec2(px)));
+    imageStore(cl_dir_img, px, vec4(r.L, r.T));
+    imageStore(cl_dir_depth_img, px, vec4(r.depth));
+    imageStore(cl_dir_prof_img, px, r.prof);                    /* (ACZ_VR_CLOUD_FAR_SPLIT's opacity profile) */
+    /* a used size below the image: repeat the last row / column once, so bilinear sampling at the border of the used
+       region never reads stale texels */
+    int ne = int(pc.fr.y);
+    if (ne < imageSize(cl_dir_img).x && (px.x == ne - 1 || px.y == ne - 1)) {
+        ivec2 q = min(px + ivec2(px.x == ne - 1 ? 1 : 0, px.y == ne - 1 ? 1 : 0), ivec2(ne));
+        imageStore(cl_dir_img, q, vec4(r.L, r.T)); imageStore(cl_dir_depth_img, q, vec4(r.depth));
+        imageStore(cl_dir_prof_img, q, r.prof);
+        if (px.x == ne - 1 && px.y == ne - 1) {
+            imageStore(cl_dir_img, ivec2(ne, px.y), vec4(r.L, r.T)); imageStore(cl_dir_depth_img, ivec2(ne, px.y), vec4(r.depth));
+            imageStore(cl_dir_img, ivec2(px.x, ne), vec4(r.L, r.T)); imageStore(cl_dir_depth_img, ivec2(px.x, ne), vec4(r.depth));
+            imageStore(cl_dir_prof_img, ivec2(ne, px.y), r.prof); imageStore(cl_dir_prof_img, ivec2(px.x, ne), r.prof);
+        }
+    }
+    atomicMin(s_first, floatBitsToUint(r.first));
+    /* the tile's sharpest step, as seen over the sky colour (for the contrast-aware limit) */
+    const vec3 lw = vec3(0.299, 0.587, 0.114);
+    uint li = gl_LocalInvocationIndex;
+    s_y[li] = dot(r.L, lw) + dot(cl.sky_hor.rgb, lw) * r.T;
+    barrier();
+    {   float y0 = s_y[li], gmax = 0.0;
+        if ((li & 7u) != 7u) gmax = abs(s_y[li + 1u] - y0);
+        if (li < 56u) gmax = max(gmax, abs(s_y[li + 8u] - y0));
+        atomicMax(s_grad, uint(clamp(gmax, 0.0, 1.0) * 65535.0)); }
+#ifdef CL_STATS
+    atomicAdd(cl_stats[0], r.evals & 0xFFFFu); atomicAdd(cl_stats[1], r.evals >> 16); atomicAdd(cl_stats[2], 1u);
+    if (r.T < 0.99) atomicAdd(cl_stats[3], 1u);
+#endif
+    barrier();
+    if (gl_LocalInvocationIndex == 0u) {
+        tiles[tile].cam = vec4(pc.cam.xyz, uintBitsToFloat(s_first));
+        tiles[tile].st.x = pc.fr.x;
+        tiles[tile].st.y = (tiles[tile].st.z & 1u) | (s_grad << 16);
+        tiles[tile].st.w = pc.fr.w >> 9;
+    }
+}
+#endif

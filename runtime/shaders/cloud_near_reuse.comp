@@ -1,0 +1,146 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+/* cloud_near_reuse.comp (nx_cloudreuse, 2026-10-25; ACZ_VR_CLOUD_NEAR_REUSE, ps2_clouds_near.c): an in-between frame's
+   near clouds beyond the first tier node (60 m) from the last game frame's march. One workgroup = one 8 x 8-texel block
+   of one eye layer. Every texel's far part is reprojected from the game frame's (the history, same eye layer:
+   CL_B_NEAR_FAR = its march beyond the node, CL_B_NEAR_PAR = that part's reprojection depth, spread, clip distance) into
+   this frame's near buffer (CL_B_NEAR_IMG; cloud_near.comp flag 512 then marches the part before the node in front of
+   it, or the whole ray in a flagged block):
+   - its ray (this frame's eye and pose) is followed to the history's reprojection depth (the contribution-weighted mean
+     of 1 / distance, two fixed-point steps from the rotation-only position) and projected into the game frame's eye
+     (NearHist: its axes, its eyes in this frame's cloud space, its projection, its crops);
+   - colour and transmittance are bilinear over the four history texels there; the clip distance is this frame's
+     (texel_clip, the scene re-drawn for this pose; written to CL_B_NEAR_DEPTH_IMG for the march and the composite);
+   - the texel is NOT trusted, and its block is flagged for a real march (cloud_near.comp flag 512) when: a source lies
+     off the history image or outside what the game frame marched (crop, lens mask); a source's clip distance differs
+     from this texel's by more than 3 % + the eye's motion + 1 m (a scene edge, something that moved); the sources'
+     reprojection depths would pull them apart by more than pc.f0.y texels (a cloud depth edge); or the error estimate
+     (the eye's motion across the ray x the spread of 1 / distance inside and across the sources, in texels, x the
+     range of colour and transmittance over the four) exceeds pc.f0.x.
+   Outside this frame's crop / lens mask: no cloud, as the march writes it. The in-cloud probe stays in the march pass.
+   Push constants: i0.x first eye layer, i0.y flags (128 lens mask valid), i0.w frame slot (lens bits, counters); i1.x
+   blocks per row, i1.y block rows, i1.z the NearHist entry; f0.x error tolerance (0..1), f0.y cloud depth edge
+   tolerance (texels). NearHist and the counters are device-local (a per-thread read of host-visible memory, which is
+   system memory here, cost this pass ~0.3 ms). */
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+#define CL_STORAGE
+#include "cloud_common.glsl"
+layout(push_constant) uniform PC { ivec4 i0; ivec4 i1; vec4 f0; vec4 f1; } pc;
+layout(set = 0, binding = 17) uniform sampler2DArray cl_hist_tex;   /* the game frame's march beyond the node (nearest) */
+layout(set = 0, binding = 18) uniform sampler2DArray cl_par_tex;    /* its reprojection depth (1/m), spread, clip (m) */
+layout(set = 1, binding = 1, std430) readonly buffer NearLens { uint bits[]; } lens;
+layout(set = 1, binding = 2, std430) writeonly buffer NearFlags { uint f[]; } flags;
+/* per entry 12 vec4: 0-2 the game frame's view axes x, y, z (world); 3, 4 its left / right eye in this frame's cloud
+   space; 5 its projection fx, fy, cx, cy (target pixels); 6, 7 its crops per eye (target pixels x0, y0, x1, y1) */
+layout(set = 1, binding = 3, std430) readonly buffer NearHist { vec4 h[]; } hist;
+layout(set = 1, binding = 4, std430) buffer NearStats { uint n[]; } stats;  /* per slot: visible blocks, re-marched */
+#define NEAR_LENS_UINTS 2048
+#define NEAR_HIST_VEC4 12
+
+vec4 H(int k) { return hist.h[pc.i1.z * NEAR_HIST_VEC4 + k]; }
+
+bool lens_hidden(ivec2 q, int eye) {
+    if ((pc.i0.y & 128) == 0) return false;
+    int bw = (int(cl.sizes.y) + 7) / 8, bh = (int(cl.sizes.z) + 7) / 8;
+    int i = (eye * bh + q.y / 8) * bw + q.x / 8;
+    uint w = lens.bits[uint(pc.i0.w) * uint(NEAR_LENS_UINTS) + uint(i >> 5)];
+    return ((w >> uint(i & 31)) & 1u) != 0u;
+}
+bool outside(vec4 vis, ivec2 q, int eye) {
+    ivec4 vt = ivec4(floor(vis.x * 0.5), floor(vis.y * 0.5), ceil(vis.z * 0.5), ceil(vis.w * 0.5));
+    return (vt.z > vt.x && vt.w > vt.y && (q.x < vt.x || q.x >= vt.z || q.y < vt.y || q.y >= vt.w)) || lens_hidden(q, eye);
+}
+/* nearest scene distance of texel q's 2x2 target block, clipped at the range (= cloud_near.comp) */
+float texel_clip(ivec2 q, int eye) {
+    ivec2 px = q * 2, lim = ivec2(cl.sizes.w, cl.sizes2.x) - 1;
+    float sd = CL_INF;
+    for (int k = 0; k < 4; k++) sd = min(sd, cl_scene_dist_m(min(px + ivec2(k & 1, k >> 1), lim), eye));
+    return min(sd, cl.cfg.z);
+}
+/* a point of this frame's cloud space -> the game frame eye's texel position (texel centres at integers); vz = its
+   view depth there (> 0 in front) */
+vec2 hproj(vec3 p, int eye, out float vz) {
+    vec3 v = p - H(3 + eye).xyz;
+    float x = dot(v, H(0).xyz), y = dot(v, H(1).xyz);
+    vz = -dot(v, H(2).xyz);
+    vec4 pr = H(5);
+    vec2 px = vec2(pr.z + pr.x * x / vz, pr.w - pr.y * y / vz);
+    return (px - 1.0) * 0.5;                     /* texel i's ray passes through pixel position 2i + 1 */
+}
+
+/* the texel from the history; false = not trusted (its block is marched) */
+bool reproject(ivec2 q, int eye, float clip, out vec4 c) {
+    c = vec4(0.0, 0.0, 0.0, 1.0);
+    float range = cl.cfg.z;
+    ivec2 lim = ivec2(cl.sizes.y, cl.sizes.z) - 1;
+    vec3 vr = cl_view_ray(vec2(q * 2) + 1.0);
+    vec3 rd = normalize(cl_view_to_world(vr));
+    vec3 ro = cl_eye(eye);
+    float vz;
+    vec2 t = hproj(ro + rd * 1.0e5, eye, vz);    /* rotation only */
+    if (!(vz > 0.0)) return false;
+    for (int it = 0; it < 2; it++) {             /* then by the history's reprojection depth there */
+        ivec2 n = clamp(ivec2(floor(t + 0.5)), ivec2(0), lim);
+        float iv = texelFetch(cl_par_tex, ivec3(n, eye), 0).x;
+        float d = min(1.0 / max(iv, 1.0e-5), clip);
+        t = hproj(ro + rd * d, eye, vz);
+        if (!(vz > 0.0)) return false;
+    }
+    ivec2 b = ivec2(floor(t));
+    vec2 f = t - vec2(b);
+    if (b.x < 0 || b.y < 0 || b.x + 1 > lim.x || b.y + 1 > lim.y) return false;   /* off the history image */
+    vec3 dv = ro - H(3 + eye).xyz;                    /* the eye's motion since the game frame */
+    float mv = length(dv - rd * dot(dv, rd));         /* across the ray (m) */
+    float tpr = 0.5 * cl.proj.x * (1.0 + dot(vr.xy, vr.xy));   /* texels per radian along the image there */
+    float tolc = 0.03 * clip + length(dv) + 1.0;
+    vec4 hv = H(6 + eye);
+    vec4 cs[4];
+    float plo = 1.0e9, phi = -1.0e9, sp = 0.0;
+    for (int k = 0; k < 4; k++) {
+        ivec2 n = b + ivec2(k & 1, k >> 1);
+        if (outside(hv, n, eye)) return false;        /* the game frame did not march it */
+        vec3 pv = texelFetch(cl_par_tex, ivec3(n, eye), 0).xyz;
+        if (!(pv.z >= range - 0.5 && clip >= range - 0.5) && abs(pv.z - clip) > tolc) return false;   /* a scene edge */
+        cs[k] = texelFetch(cl_hist_tex, ivec3(n, eye), 0);
+        plo = min(plo, pv.x); phi = max(phi, pv.x); sp = max(sp, pv.y);
+    }
+    float edge = mv * tpr * (phi - plo);              /* texels the four sources' depths pull apart */
+    if (edge > pc.f0.y) return false;
+    vec4 lo = min(min(cs[0], cs[1]), min(cs[2], cs[3])), hi = max(max(cs[0], cs[1]), max(cs[2], cs[3]));
+    vec4 g = hi - lo;
+    float gm = max(max(g.r, g.g), max(g.b, g.a));
+    if (mv * tpr * max(phi - plo, sp) * gm > pc.f0.x) return false;   /* the error estimate */
+    c = mix(mix(cs[0], cs[1], f.x), mix(cs[2], cs[3], f.x), f.y);
+    return true;
+}
+
+shared uint s_bad, s_vis;
+void main() {
+    if (gl_LocalInvocationIndex == 0u) { s_bad = 0u; s_vis = 0u; }
+    barrier();
+    ivec3 id = ivec3(gl_GlobalInvocationID);
+    int eye = id.z + pc.i0.x;
+    ivec2 q = id.xy;
+    if (q.x < int(cl.sizes.y) && q.y < int(cl.sizes.z)) {
+        if (outside(cl.vis[eye], q, eye)) {      /* outside what the headset shows: no cloud (as the march) */
+            imageStore(cl_near_img, ivec3(q, eye), vec4(0.0, 0.0, 0.0, 1.0));
+            imageStore(cl_near_depth_img, ivec3(q, eye), vec4(cl.cfg.z));
+        } else {
+            s_vis = 1u;
+            float clip = texel_clip(q, eye);
+            imageStore(cl_near_depth_img, ivec3(q, eye), vec4(clip));
+            vec4 c;
+            if (reproject(q, eye, clip, c)) imageStore(cl_near_img, ivec3(q, eye), c);
+            else s_bad = 1u;
+        }
+    }
+    barrier();
+    if (gl_LocalInvocationIndex == 0u) {
+        uint bi = (uint(eye) * uint(pc.i1.y) + gl_WorkGroupID.y) * uint(pc.i1.x) + gl_WorkGroupID.x;
+        flags.f[bi] = s_bad;
+        if (s_vis != 0u) {
+            atomicAdd(stats.n[uint(pc.i0.w) * 4u], 1u);
+            if (s_bad != 0u) atomicAdd(stats.n[uint(pc.i0.w) * 4u + 1u], 1u);
+        }
+    }
+}

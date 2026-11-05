@@ -1,0 +1,14 @@
+ac0vr
+Copyright 2026 the ac0vr contributors
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This project is derived from ps2recomp: Ace Combat 5 by sal063
+(https://github.com/sal063/Ace-Combat-5-Static-recompilation, Apache-2.0): the recompiler in tools/ps2recomp and tools/vurecomp,
+the runtime in runtime/ and the mod layer. Its files have been modified since 2026-10-18; its README is kept unchanged in
+docs/README_ac5recomp_upstream.md.
+
+Third-party components and their licences: THIRD_PARTY_NOTICES.md.
+
+This project contains no code or data of any PlayStation 2 game and is not affiliated with or endorsed by Bandai Namco
+Entertainment or Sony Interactive Entertainment. Names of games and consoles are used only to say what the project works with.

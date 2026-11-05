@@ -1,0 +1,1282 @@
+{
+ "about": "Ace Combat Zero (SLUS-21346): cloud and weather data per campaign mission (branch 0), read from the game by runtime/src/zero_clouds.c (ACZ_DEBUG_CLOUD_DATA=60, one light run per mission via run_test.sh MISSION=n, 2026-10-20). C1 (ps2_cloud_env) is filled live from the same data every frame; this table is the offline reference and the fallback. Metres = game units / 6; colours RGB 0..255 (0x00BBGGRR words).",
+ "fields": {
+  "c1": "what zero_clouds.c publishes in this mission: base_m/top_m = P10/P90 of Y -/+ 0.675 height over the list; coverage = 1 - exp(-sum(pi (0.675 radius)^2 opacity) / 21845^2), opacity averaged over the coverage map copies (coverage_unmasked without the map); type 0 stratus .. 1 cumulus from the median S / 8.85 (1000 m -> 0, 350 m -> 1); transp = 0 (the game alpha only raises the drop threshold); precip_max = max of the set halves A/B (the live value is sky +0xB8C); sun_dir = world unit vector (y up) from the elevation/azimuth",
+  "clouds": "type_word = env +0x190 (bit 1 cloud field, bit 0x100 two impostor variants); count = u16 +0x200 (count_hi = its upper u16, unknown); alpha = +0x1FC (128 opaque); wind = +0x1A0/+0x1A4 (units/s) / 6; desc_08_m = +0x198 / 6 (meaning unknown); variant_y_m = [base, spread (half range), size scale] per variant; centre_m, sprite_m (the game sprite half-size S = size x 2304 x scale / 206.6 units), radius_m (visible body, horizontal semi-axis 0.667 S x build_width_fw), height_m (vertical semi-axis 0.262 S) = P10/P50/P90 over the list; band_m = the c1 band; coverage_unmasked ignores the coverage map; map_mean / map_used: the coverage map (mean, fraction of 4x4-cell blocks above 0)",
+  "precip": "amount = env +0xD4 / +0x174 (set halves A / B, blended by sky +0xB30), kind_value +0xD8 / +0x178 (>= 0.5 snow), band_m = sky +0x10/+0x14: precipitation is full below the band and fades to 0 at its top",
+  "sun": "elevation/azimuth = env +0x58/+0x5C (file offsets; second_pair +0x88/+0x8C); dir = (-cos e sin a, sin e, -cos e cos a)",
+  "fog_m": "env +0x50/+0x54 (A) and +0xF0/+0xF4 (B) / 6: fog near / far",
+  "run": "camera altitude range and the blend/precipitation values seen in the probe run (not mission data)",
+  "earlier_sets": "environment sets active before the flight one (intro / take-off sub-stage)"
+ },
+ "missions": [
+  {
+   "mission": 1,
+   "name": "Glacial Skies",
+   "stage": 0,
+   "source": "zero_cp_r01.log",
+   "c1": {
+    "base_m": 137,
+    "top_m": 4342,
+    "coverage": 0.998,
+    "coverage_unmasked": 1.0,
+    "type": 0.0,
+    "transp": 0.0,
+    "precip_max": 0.2,
+    "sun_dir": [-0.1294, 0.866, 0.483]
+   },
+   "clouds": {
+    "type_word": "0x003",
+    "field_on": true,
+    "variants": 4,
+    "count": 280,
+    "count_hi": 60,
+    "alpha": 128,
+    "wind_mps": [83.33, -0.0],
+    "wind_speed_mps": 83.33,
+    "wind_heading_deg": 90.0,
+    "lit_rgb": [208, 211, 213],
+    "shadow_rgb": [38, 51, 72],
+    "desc_08_m": 4167,
+    "variant_y_m": [[ 2150, 410, 1.6 ], [ 2317, 444, 1.5 ], [ 2233, 478, 1.6 ], [ 2392, 410, 1.4 ]],
+    "centre_m": [1900, 2304, 2646],
+    "sprite_m": [6325, 8826, 11244],
+    "radius_m": [2439, 5129, 7200],
+    "height_m": [1657, 2313, 2946],
+    "band_m": [137, 4342],
+    "build_width_fw": [1.0, 1.0, 0.417, 1.0],
+    "coverage": 0.998,
+    "coverage_unmasked": 1.0,
+    "opacity_mean": 0.265,
+    "map_mean": 0.263,
+    "map_used": 0.494,
+    "n_with_coverage": 277
+   },
+   "precip": {
+    "kind": "snow",
+    "amount": [0.1, 0.2],
+    "kind_value": [0.8, 0.8],
+    "band_m": [2133, 3413]
+   },
+   "sun": {
+    "elev_deg": 60.0,
+    "azim_deg": 165.0,
+    "dir": [-0.1294, 0.866, 0.483],
+    "second_pair_deg": [60.0, 165.0]
+   },
+   "fog_m": {
+    "A": [-1280, 8533],
+    "B": [-1280, 6827]
+   },
+   "run": {
+    "camera_alt_m": [565, 1666],
+    "set_blend_t": [0.0, 0.0],
+    "precip_seen": [0.1, 0.1]
+   },
+   "earlier_sets": [
+    {
+     "first_field": 167,
+     "count": 280,
+     "type_word": "0x003",
+     "alpha": 128,
+     "precip": [0.0, 0.2],
+     "sun": [60.0, 165.0]
+    }
+   ]
+  },
+  {
+   "mission": 2,
+   "name": "Annex",
+   "stage": 1,
+   "source": "zero_cp_m02.log",
+   "c1": {
+    "base_m": 1208,
+    "top_m": 4194,
+    "coverage": 0.41,
+    "coverage_unmasked": 0.997,
+    "type": 0.53,
+    "transp": 0.0,
+    "precip_max": 0.0,
+    "sun_dir": [0.4924, 0.766, 0.4132]
+   },
+   "clouds": {
+    "type_word": "0x003",
+    "field_on": true,
+    "variants": 4,
+    "count": 150,
+    "count_hi": 12,
+    "alpha": 96,
+    "wind_mps": [-83.33, -0.0],
+    "wind_speed_mps": 83.33,
+    "wind_heading_deg": -90.0,
+    "lit_rgb": [224, 225, 217],
+    "shadow_rgb": [70, 89, 84],
+    "desc_08_m": 2750,
+    "variant_y_m": [[ 2667, 341, 1.0 ], [ 2500, 341, 1.0 ], [ 2750, 683, 1.0 ], [ 3000, 0, 1.0 ]],
+    "centre_m": [2304, 2788, 3004],
+    "sprite_m": [4354, 5807, 7055],
+    "radius_m": [2706, 3549, 4494],
+    "height_m": [1141, 1521, 1848],
+    "band_m": [1208, 4194],
+    "build_width_fw": [0.833, 0.933, 1.0, 1.0],
+    "coverage": 0.41,
+    "coverage_unmasked": 0.997,
+    "opacity_mean": 0.09,
+    "map_mean": 0.091,
+    "map_used": 0.168,
+    "n_with_coverage": 122
+   },
+   "precip": {
+    "kind": "none",
+    "amount": [0.0, 0.0],
+    "kind_value": [0.0, 0.0],
+    "band_m": [2816, 6827]
+   },
+   "sun": {
+    "elev_deg": 50.0,
+    "azim_deg": -130.0,
+    "dir": [0.4924, 0.766, 0.4132],
+    "second_pair_deg": [50.0, -130.0]
+   },
+   "fog_m": {
+    "A": [0, 7680],
+    "B": [0, 7680]
+   },
+   "run": {
+    "camera_alt_m": [89, 691],
+    "set_blend_t": [0.0, 0.0],
+    "precip_seen": [0.0, 0.0]
+   },
+   "earlier_sets": [
+    {
+     "first_field": 158,
+     "count": 100,
+     "type_word": "0x103",
+     "alpha": 96,
+     "precip": [0.0, 0.0],
+     "sun": [40.0, -125.0]
+    }
+   ]
+  },
+  {
+   "mission": 3,
+   "name": "The Round Table",
+   "stage": 2,
+   "source": "zero_cp_r03.log",
+   "c1": {
+    "base_m": 319,
+    "top_m": 1692,
+    "coverage": 0.355,
+    "coverage_unmasked": 0.926,
+    "type": 1.0,
+    "transp": 0.0,
+    "precip_max": 0.0,
+    "sun_dir": [0.3214, 0.766, 0.5567]
+   },
+   "clouds": {
+    "type_word": "0x10F",
+    "field_on": true,
+    "variants": 2,
+    "count": 200,
+    "count_hi": 35,
+    "alpha": 128,
+    "wind_mps": [0.0, -0.0],
+    "wind_speed_mps": 0.0,
+    "wind_heading_deg": 135.0,
+    "lit_rgb": [230, 230, 219],
+    "shadow_rgb": [84, 84, 93],
+    "desc_08_m": 3750,
+    "variant_y_m": [[ 1000, 0, 0.5 ], [ 1000, 0, 0.6 ]],
+    "centre_m": [1000, 1000, 1000],
+    "sprite_m": [2285, 3027, 3910],
+    "radius_m": [1524, 2019, 2608],
+    "height_m": [599, 793, 1024],
+    "band_m": [319, 1692],
+    "build_width_fw": [1.0, 1.0],
+    "coverage": 0.355,
+    "coverage_unmasked": 0.926,
+    "opacity_mean": 0.169,
+    "map_mean": 0.169,
+    "map_used": 0.403,
+    "n_with_coverage": 194
+   },
+   "precip": {
+    "kind": "none",
+    "amount": [0.0, 0.0],
+    "kind_value": [0.0, 0.0],
+    "band_m": [853, 4267]
+   },
+   "sun": {
+    "elev_deg": 50.0,
+    "azim_deg": -150.0,
+    "dir": [0.3214, 0.766, 0.5567],
+    "second_pair_deg": [50.0, -150.0]
+   },
+   "fog_m": {
+    "A": [0, 8533],
+    "B": [0, 8533]
+   },
+   "run": {
+    "camera_alt_m": [54, 610],
+    "set_blend_t": [0.0, 0.0],
+    "precip_seen": [0.0, 0.0]
+   },
+   "earlier_sets": [
+    {
+     "first_field": 424,
+     "count": 120,
+     "type_word": "0x10F",
+     "alpha": 96,
+     "precip": [0.0, 0.0],
+     "sun": [25.0, -140.0]
+    }
+   ]
+  },
+  {
+   "mission": 4,
+   "name": "Juggernaut",
+   "stage": 6,
+   "source": "zero_cp_m04.log",
+   "c1": {
+    "base_m": 593,
+    "top_m": 3989,
+    "coverage": 0.569,
+    "coverage_unmasked": 0.999,
+    "type": 0.32,
+    "transp": 0.0,
+    "precip_max": 0.0,
+    "sun_dir": [0.05, 0.8192, 0.5714]
+   },
+   "clouds": {
+    "type_word": "0x107",
+    "field_on": true,
+    "variants": 2,
+    "count": 100,
+    "count_hi": 40,
+    "alpha": 128,
+    "wind_mps": [-16.67, -0.0],
+    "wind_speed_mps": 16.67,
+    "wind_heading_deg": -90.0,
+    "lit_rgb": [159, 159, 157],
+    "shadow_rgb": [119, 117, 102],
+    "desc_08_m": 3000,
+    "variant_y_m": [[ 2167, 444, 1.2 ], [ 2333, 341, 1.3 ]],
+    "centre_m": [1894, 2257, 2533],
+    "sprite_m": [5118, 7006, 9024],
+    "radius_m": [3414, 4673, 6019],
+    "height_m": [1341, 1836, 2364],
+    "band_m": [593, 3989],
+    "build_width_fw": [1.0, 1.0],
+    "coverage": 0.569,
+    "coverage_unmasked": 0.999,
+    "opacity_mean": 0.123,
+    "map_mean": 0.117,
+    "map_used": 0.199,
+    "n_with_coverage": 94
+   },
+   "precip": {
+    "kind": "none",
+    "amount": [0.0, 0.0],
+    "kind_value": [0.0, 0.0],
+    "band_m": [1707, 3413]
+   },
+   "sun": {
+    "elev_deg": 55.0,
+    "azim_deg": -175.0,
+    "dir": [0.05, 0.8192, 0.5714],
+    "second_pair_deg": [55.0, -175.0]
+   },
+   "fog_m": {
+    "A": [2048, 7680],
+    "B": [2048, 7680]
+   },
+   "run": {
+    "camera_alt_m": [2157, 2157],
+    "set_blend_t": [0.0, 0.0],
+    "precip_seen": [0.0, 0.0]
+   }
+  },
+  {
+   "mission": 5,
+   "name": "Flicker of Hope",
+   "stage": 8,
+   "source": "zero_cp_m05.log",
+   "c1": {
+    "base_m": 255,
+    "top_m": 3424,
+    "coverage": 0.495,
+    "coverage_unmasked": 0.999,
+    "type": 0.38,
+    "transp": 0.0,
+    "precip_max": 0.0,
+    "sun_dir": [0.9879, 0.0698, 0.1388]
+   },
+   "clouds": {
+    "type_word": "0x103",
+    "field_on": true,
+    "variants": 2,
+    "count": 120,
+    "count_hi": 18,
+    "alpha": 128,
+    "wind_mps": [-83.33, -0.0],
+    "wind_speed_mps": 83.33,
+    "wind_heading_deg": -90.0,
+    "lit_rgb": [214, 166, 152],
+    "shadow_rgb": [44, 50, 73],
+    "desc_08_m": 4167,
+    "variant_y_m": [[ 1833, 341, 1.3 ], [ 1833, 341, 1.0 ]],
+    "centre_m": [1556, 1800, 2124],
+    "sprite_m": [4575, 6666, 9024],
+    "radius_m": [3052, 4446, 6019],
+    "height_m": [1199, 1746, 2364],
+    "band_m": [255, 3424],
+    "build_width_fw": [1.0, 1.0],
+    "coverage": 0.495,
+    "coverage_unmasked": 0.999,
+    "opacity_mean": 0.092,
+    "map_mean": 0.091,
+    "map_used": 0.168,
+    "n_with_coverage": 104
+   },
+   "precip": {
+    "kind": "none",
+    "amount": [0.0, 0.0],
+    "kind_value": [0.0, 0.0],
+    "band_m": [427, 5120]
+   },
+   "sun": {
+    "elev_deg": 4.0,
+    "azim_deg": -98.0,
+    "dir": [0.9879, 0.0698, 0.1388],
+    "second_pair_deg": [4.0, -98.0]
+   },
+   "fog_m": {
+    "A": [-2048, 6827],
+    "B": [-2048, 6827]
+   },
+   "run": {
+    "camera_alt_m": [1667, 1667],
+    "set_blend_t": [0.0, 0.024],
+    "precip_seen": [0.0, 0.0]
+   }
+  },
+  {
+   "mission": 6,
+   "name": "Diapason",
+   "stage": 9,
+   "source": "zero_cp_m06.log",
+   "c1": {
+    "base_m": 935,
+    "top_m": 4112,
+    "coverage": 0.439,
+    "coverage_unmasked": 0.998,
+    "type": 0.45,
+    "transp": 0.0,
+    "precip_max": 0.0,
+    "sun_dir": [-0.9649, 0.1392, 0.2228]
+   },
+   "clouds": {
+    "type_word": "0x103",
+    "field_on": true,
+    "variants": 2,
+    "count": 120,
+    "count_hi": 40,
+    "alpha": 96,
+    "wind_mps": [16.1, 4.31],
+    "wind_speed_mps": 16.67,
+    "wind_heading_deg": 75.0,
+    "lit_rgb": [196, 181, 121],
+    "shadow_rgb": [43, 43, 36],
+    "desc_08_m": 2500,
+    "variant_y_m": [[ 2333, 273, 1.2 ], [ 2833, 410, 1.0 ]],
+    "centre_m": [2165, 2522, 3021],
+    "sprite_m": [4624, 6264, 7758],
+    "radius_m": [3084, 4178, 5175],
+    "height_m": [1212, 1641, 2033],
+    "band_m": [935, 4112],
+    "build_width_fw": [1.0, 1.0],
+    "coverage": 0.439,
+    "coverage_unmasked": 0.998,
+    "opacity_mean": 0.094,
+    "map_mean": 0.091,
+    "map_used": 0.168,
+    "n_with_coverage": 100
+   },
+   "precip": {
+    "kind": "none",
+    "amount": [0.0, 0.0],
+    "kind_value": [0.0, 0.0],
+    "band_m": [0, 5120]
+   },
+   "sun": {
+    "elev_deg": 8.0,
+    "azim_deg": 103.0,
+    "dir": [-0.9649, 0.1392, 0.2228],
+    "second_pair_deg": [8.0, 103.0]
+   },
+   "fog_m": {
+    "A": [0, 6827],
+    "B": [0, 6827]
+   },
+   "run": {
+    "camera_alt_m": [696, 996],
+    "set_blend_t": [0.0, 0.0],
+    "precip_seen": [0.0, 0.0]
+   }
+  },
+  {
+   "mission": 7,
+   "name": "Bastion",
+   "stage": 10,
+   "source": "zero_cp_m07.log",
+   "c1": {
+    "base_m": -343,
+    "top_m": 2016,
+    "coverage": 0.574,
+    "coverage_unmasked": 0.999,
+    "type": 0.71,
+    "transp": 0.0,
+    "precip_max": 0.6,
+    "sun_dir": [-0.7912, 0.5736, 0.212]
+   },
+   "clouds": {
+    "type_word": "0x103",
+    "field_on": true,
+    "variants": 2,
+    "count": 200,
+    "count_hi": 40,
+    "alpha": 84,
+    "wind_mps": [-0.0, -0.0],
+    "wind_speed_mps": 0.0,
+    "wind_heading_deg": -90.0,
+    "lit_rgb": [111, 122, 132],
+    "shadow_rgb": [32, 35, 40],
+    "desc_08_m": 7333,
+    "variant_y_m": [[ 833, 0, 1.0 ], [ 833, 0, 0.7 ]],
+    "centre_m": [833, 833, 833],
+    "sprite_m": [3208, 4772, 6689],
+    "radius_m": [2140, 3183, 4462],
+    "height_m": [841, 1250, 1753],
+    "band_m": [-343, 2016],
+    "build_width_fw": [1.0, 1.0],
+    "coverage": 0.574,
+    "coverage_unmasked": 0.999,
+    "opacity_mean": 0.132,
+    "map_mean": 0.138,
+    "map_used": 0.279,
+    "n_with_coverage": 53
+   },
+   "precip": {
+    "kind": "rain",
+    "amount": [0.05, 0.6],
+    "kind_value": [0.0, 0.0],
+    "band_m": [2987, 4267]
+   },
+   "sun": {
+    "elev_deg": 35.0,
+    "azim_deg": 105.0,
+    "dir": [-0.7912, 0.5736, 0.212],
+    "second_pair_deg": [35.0, 105.0]
+   },
+   "fog_m": {
+    "A": [-2731, 5120],
+    "B": [-2731, 5120]
+   },
+   "run": {
+    "camera_alt_m": [716, 1334],
+    "set_blend_t": [0.0, 0.0],
+    "precip_seen": [0.05, 0.05]
+   },
+   "earlier_sets": [
+    {
+     "first_field": 158,
+     "count": 120,
+     "type_word": "0x103",
+     "alpha": 96,
+     "precip": [0.0, 0.0],
+     "sun": [48.0, 130.0]
+    }
+   ]
+  },
+  {
+   "mission": 8,
+   "name": "Merlon",
+   "stage": 11,
+   "source": "zero_cp_m08.log",
+   "c1": {
+    "base_m": 644,
+    "top_m": 4452,
+    "coverage": 0.9,
+    "coverage_unmasked": 1.0,
+    "type": 0.37,
+    "transp": 0.0,
+    "precip_max": 0.0,
+    "sun_dir": [-0.596, 0.766, 0.2408]
+   },
+   "clouds": {
+    "type_word": "0x003",
+    "field_on": true,
+    "variants": 4,
+    "count": 200,
+    "count_hi": 60,
+    "alpha": 96,
+    "wind_mps": [-133.33, -0.0],
+    "wind_speed_mps": 133.33,
+    "wind_heading_deg": -90.0,
+    "lit_rgb": [186, 191, 176],
+    "shadow_rgb": [31, 45, 46],
+    "desc_08_m": 2333,
+    "variant_y_m": [[ 2333, 410, 1.4 ], [ 2667, 683, 1.2 ], [ 2167, 683, 1.0 ], [ 3083, 0, 1.2 ]],
+    "centre_m": [1989, 2620, 3083],
+    "sprite_m": [4789, 6704, 9008],
+    "radius_m": [3194, 4471, 6008],
+    "height_m": [1255, 1756, 2360],
+    "band_m": [644, 4452],
+    "build_width_fw": [1.0, 1.0, 1.0, 1.0],
+    "coverage": 0.9,
+    "coverage_unmasked": 1.0,
+    "opacity_mean": 0.177,
+    "map_mean": 0.173,
+    "map_used": 0.332,
+    "n_with_coverage": 190
+   },
+   "precip": {
+    "kind": "none",
+    "amount": [0.0, 0.0],
+    "kind_value": [0.0, 0.0],
+    "band_m": [2219, 4267]
+   },
+   "sun": {
+    "elev_deg": 50.0,
+    "azim_deg": 112.0,
+    "dir": [-0.596, 0.766, 0.2408],
+    "second_pair_deg": [50.0, 112.0]
+   },
+   "fog_m": {
+    "A": [-1024, 6827],
+    "B": [-1024, 6827]
+   },
+   "run": {
+    "camera_alt_m": [417, 417],
+    "set_blend_t": [0.0, 0.0],
+    "precip_seen": [0.0, 0.0]
+   }
+  },
+  {
+   "mission": 9,
+   "name": "Sword of Annihilation",
+   "stage": 14,
+   "source": "zero_cp_r09.log",
+   "c1": {
+    "base_m": 644,
+    "top_m": 4438,
+    "coverage": 0.587,
+    "coverage_unmasked": 1.0,
+    "type": 0.38,
+    "transp": 0.0,
+    "precip_max": 1.0,
+    "sun_dir": [-0.4132, 0.766, 0.4924]
+   },
+   "clouds": {
+    "type_word": "0x003",
+    "field_on": true,
+    "variants": 4,
+    "count": 120,
+    "count_hi": 60,
+    "alpha": 128,
+    "wind_mps": [0.0, 133.33],
+    "wind_speed_mps": 133.33,
+    "wind_heading_deg": 0.0,
+    "lit_rgb": [179, 184, 169],
+    "shadow_rgb": [22, 32, 33],
+    "desc_08_m": 2333,
+    "variant_y_m": [[ 2333, 410, 1.4 ], [ 2667, 683, 1.2 ], [ 2167, 683, 1.0 ], [ 3083, 0, 1.2 ]],
+    "centre_m": [1996, 2631, 3083],
+    "sprite_m": [4698, 6676, 9082],
+    "radius_m": [3133, 4453, 6057],
+    "height_m": [1231, 1749, 2379],
+    "band_m": [644, 4438],
+    "build_width_fw": [1.0, 1.0, 1.0, 1.0],
+    "coverage": 0.587,
+    "coverage_unmasked": 1.0,
+    "opacity_mean": 0.124,
+    "map_mean": 0.12,
+    "map_used": 0.23,
+    "n_with_coverage": 111
+   },
+   "precip": {
+    "kind": "rain",
+    "amount": [0.0, 1.0],
+    "kind_value": [0.0, 0.0],
+    "band_m": [2560, 5120]
+   },
+   "sun": {
+    "elev_deg": 50.0,
+    "azim_deg": 140.0,
+    "dir": [-0.4132, 0.766, 0.4924],
+    "second_pair_deg": [50.0, 140.0]
+   },
+   "fog_m": {
+    "A": [-1707, 5547],
+    "B": [-1707, 5547]
+   },
+   "run": {
+    "camera_alt_m": [161, 1765],
+    "set_blend_t": [0.0, 0.0],
+    "precip_seen": [0.0, 0.0]
+   },
+   "earlier_sets": [
+    {
+     "first_field": 158,
+     "count": 320,
+     "type_word": "0x007",
+     "alpha": 128,
+     "precip": [0.0, 1.0],
+     "sun": [50.0, 140.0]
+    }
+   ]
+  },
+  {
+   "mission": 10,
+   "name": "Mayhem",
+   "stage": 15,
+   "source": "zero_cp_r10.log",
+   "c1": {
+    "base_m": 460,
+    "top_m": 3296,
+    "coverage": 0.438,
+    "coverage_unmasked": 0.943,
+    "type": 0.7,
+    "transp": 0.0,
+    "precip_max": 0.0,
+    "sun_dir": [0.3214, 0.766, 0.5567]
+   },
+   "clouds": {
+    "type_word": "0x107",
+    "field_on": true,
+    "variants": 2,
+    "count": 90,
+    "count_hi": 32,
+    "alpha": 128,
+    "wind_mps": [58.93, -58.93],
+    "wind_speed_mps": 83.33,
+    "wind_heading_deg": 135.0,
+    "lit_rgb": [225, 225, 217],
+    "shadow_rgb": [94, 94, 88],
+    "desc_08_m": 4583,
+    "variant_y_m": [[ 2333, 273, 0.8 ], [ 1500, 171, 0.9 ]],
+    "centre_m": [1401, 2088, 2503],
+    "sprite_m": [3639, 4808, 6043],
+    "radius_m": [2427, 3207, 4031],
+    "height_m": [953, 1260, 1583],
+    "band_m": [460, 3296],
+    "build_width_fw": [1.0, 1.0],
+    "coverage": 0.438,
+    "coverage_unmasked": 0.943,
+    "opacity_mean": 0.198,
+    "map_mean": 0.199,
+    "map_used": 0.468,
+    "n_with_coverage": 89
+   },
+   "precip": {
+    "kind": "none",
+    "amount": [0.0, 0.0],
+    "kind_value": [0.0, 0.0],
+    "band_m": [853, 5120]
+   },
+   "sun": {
+    "elev_deg": 50.0,
+    "azim_deg": -150.0,
+    "dir": [0.3214, 0.766, 0.5567],
+    "second_pair_deg": [50.0, -150.0]
+   },
+   "fog_m": {
+    "A": [0, 8533],
+    "B": [2731, 8533]
+   },
+   "run": {
+    "camera_alt_m": [387, 4954],
+    "set_blend_t": [0.0, 0.0],
+    "precip_seen": [0.0, 0.0]
+   },
+   "earlier_sets": [
+    {
+     "first_field": 427,
+     "count": 200,
+     "type_word": "0x00F",
+     "alpha": 96,
+     "precip": [0.0, 0.0],
+     "sun": [50.0, -150.0]
+    }
+   ]
+  },
+  {
+   "mission": 11,
+   "name": "The Inferno",
+   "stage": 18,
+   "source": "zero_cp_m11.log",
+   "c1": {
+    "base_m": 126,
+    "top_m": 2895,
+    "coverage": 0.329,
+    "coverage_unmasked": 0.995,
+    "type": 0.54,
+    "transp": 0.0,
+    "precip_max": 0.0,
+    "sun_dir": [-0.6275, 0.5736, 0.5265]
+   },
+   "clouds": {
+    "type_word": "0x003",
+    "field_on": true,
+    "variants": 4,
+    "count": 120,
+    "count_hi": 20,
+    "alpha": 64,
+    "wind_mps": [63.84, 53.57],
+    "wind_speed_mps": 83.33,
+    "wind_heading_deg": 50.0,
+    "lit_rgb": [43, 38, 34],
+    "shadow_rgb": [82, 58, 41],
+    "desc_08_m": 2833,
+    "variant_y_m": [[ 1417, 478, 1.0 ], [ 1500, 341, 1.0 ], [ 1417, 341, 1.0 ], [ 1500, 341, 1.0 ]],
+    "centre_m": [1168, 1488, 1776],
+    "sprite_m": [4183, 5713, 7149],
+    "radius_m": [2790, 3810, 4769],
+    "height_m": [1096, 1497, 1873],
+    "band_m": [126, 2895],
+    "build_width_fw": [1.0, 1.0, 1.0, 1.0],
+    "coverage": 0.329,
+    "coverage_unmasked": 0.995,
+    "opacity_mean": 0.072,
+    "map_mean": 0.079,
+    "map_used": 0.158,
+    "n_with_coverage": 75
+   },
+   "precip": {
+    "kind": "none",
+    "amount": [0.0, 0.0],
+    "kind_value": [0.0, 0.0],
+    "band_m": [2560, 4267]
+   },
+   "sun": {
+    "elev_deg": 35.0,
+    "azim_deg": 130.0,
+    "dir": [-0.6275, 0.5736, 0.5265],
+    "second_pair_deg": [35.0, 130.0]
+   },
+   "fog_m": {
+    "A": [0, 6827],
+    "B": [0, 6827]
+   },
+   "run": {
+    "camera_alt_m": [1667, 1667],
+    "set_blend_t": [0.0, 0.0],
+    "precip_seen": [0.0, 0.0]
+   }
+  },
+  {
+   "mission": 12,
+   "name": "The Stage of Apocalypse",
+   "stage": 19,
+   "source": "zero_cp_m12.log",
+   "c1": {
+    "base_m": 1218,
+    "top_m": 4324,
+    "coverage": 0.999,
+    "coverage_unmasked": 1.0,
+    "type": 0.47,
+    "transp": 0.0,
+    "precip_max": 0.3,
+    "sun_dir": [-0.6124, 0.7071, 0.3536]
+   },
+   "clouds": {
+    "type_word": "0x103",
+    "field_on": true,
+    "variants": 2,
+    "count": 400,
+    "count_hi": 80,
+    "alpha": 100,
+    "wind_mps": [31.32, 11.4],
+    "wind_speed_mps": 33.33,
+    "wind_heading_deg": 70.0,
+    "lit_rgb": [178, 178, 178],
+    "shadow_rgb": [57, 57, 57],
+    "desc_08_m": 2917,
+    "variant_y_m": [[ 2917, 341, 1.0 ], [ 2750, 341, 1.2 ]],
+    "centre_m": [2532, 2815, 3116],
+    "sprite_m": [4515, 6157, 8127],
+    "radius_m": [3011, 4106, 5421],
+    "height_m": [1183, 1613, 2129],
+    "band_m": [1218, 4324],
+    "build_width_fw": [1.0, 1.0],
+    "coverage": 0.999,
+    "coverage_unmasked": 1.0,
+    "opacity_mean": 0.307,
+    "map_mean": 0.302,
+    "map_used": 0.569,
+    "n_with_coverage": 400
+   },
+   "precip": {
+    "kind": "snow",
+    "amount": [0.0, 0.3],
+    "kind_value": [0.0, 1.0],
+    "band_m": [2987, 5120]
+   },
+   "sun": {
+    "elev_deg": 45.0,
+    "azim_deg": 120.0,
+    "dir": [-0.6124, 0.7071, 0.3536],
+    "second_pair_deg": [45.0, 120.0]
+   },
+   "fog_m": {
+    "A": [-725, 6144],
+    "B": [-2048, 3413]
+   },
+   "run": {
+    "camera_alt_m": [549, 549],
+    "set_blend_t": [0.0, 0.0],
+    "precip_seen": [0.0, 0.0]
+   }
+  },
+  {
+   "mission": 13,
+   "name": "Lying in Deceit",
+   "stage": 20,
+   "source": "zero_cp_m13.log",
+   "c1": {
+    "base_m": 1157,
+    "top_m": 4769,
+    "coverage": 0.668,
+    "coverage_unmasked": 1.0,
+    "type": 0.35,
+    "transp": 0.0,
+    "precip_max": 0.0,
+    "sun_dir": [-0.8263, 0.5299, 0.1908]
+   },
+   "clouds": {
+    "type_word": "0x007",
+    "field_on": true,
+    "variants": 4,
+    "count": 200,
+    "count_hi": 48,
+    "alpha": 128,
+    "wind_mps": [-0.0, -0.0],
+    "wind_speed_mps": 0.0,
+    "wind_heading_deg": -120.0,
+    "lit_rgb": [168, 176, 164],
+    "shadow_rgb": [35, 63, 67],
+    "desc_08_m": 3000,
+    "variant_y_m": [[ 2667, 341, 1.0 ], [ 3167, 512, 1.2 ], [ 3083, 444, 1.4 ], [ 2583, 341, 1.3 ]],
+    "centre_m": [2462, 2878, 3416],
+    "sprite_m": [4853, 6822, 9051],
+    "radius_m": [3237, 4550, 6037],
+    "height_m": [1271, 1787, 2371],
+    "band_m": [1157, 4769],
+    "build_width_fw": [1.0, 1.0, 1.0, 1.0],
+    "coverage": 0.668,
+    "coverage_unmasked": 1.0,
+    "opacity_mean": 0.085,
+    "map_mean": 0.091,
+    "map_used": 0.168,
+    "n_with_coverage": 159
+   },
+   "precip": {
+    "kind": "none",
+    "amount": [0.0, 0.0],
+    "kind_value": [0.0, 0.0],
+    "band_m": [2987, 4267]
+   },
+   "sun": {
+    "elev_deg": 32.0,
+    "azim_deg": 103.0,
+    "dir": [-0.8263, 0.5299, 0.1908],
+    "second_pair_deg": [32.0, 103.0]
+   },
+   "fog_m": {
+    "A": [0, 5973],
+    "B": [0, 5973]
+   },
+   "run": {
+    "camera_alt_m": [223, 834],
+    "set_blend_t": [0.0, 0.0],
+    "precip_seen": [0.0, 0.0]
+   },
+   "earlier_sets": [
+    {
+     "first_field": 208,
+     "count": 120,
+     "type_word": "0x00F",
+     "alpha": 128,
+     "precip": [0.0, 1.0],
+     "sun": [55.0, 120.0]
+    }
+   ]
+  },
+  {
+   "mission": 14,
+   "name": "The Final Overture",
+   "stage": 21,
+   "source": "zero_cp_m14.log",
+   "c1": {
+    "base_m": 1018,
+    "top_m": 5099,
+    "coverage": 0.777,
+    "coverage_unmasked": 1.0,
+    "type": 0.21,
+    "transp": 0.0,
+    "precip_max": 0.0,
+    "sun_dir": [-0.7544, 0.1736, 0.633]
+   },
+   "clouds": {
+    "type_word": "0x107",
+    "field_on": true,
+    "variants": 2,
+    "count": 200,
+    "count_hi": 45,
+    "alpha": 128,
+    "wind_mps": [-66.67, -0.0],
+    "wind_speed_mps": 66.67,
+    "wind_heading_deg": -90.0,
+    "lit_rgb": [185, 148, 117],
+    "shadow_rgb": [52, 54, 65],
+    "desc_08_m": 2833,
+    "variant_y_m": [[ 2917, 444, 1.5 ], [ 3500, 410, 1.2 ]],
+    "centre_m": [2593, 3212, 3749],
+    "sprite_m": [5443, 7652, 10380],
+    "radius_m": [2420, 3929, 6923],
+    "height_m": [1426, 2005, 2719],
+    "band_m": [1018, 5099],
+    "build_width_fw": [1.0, 0.667],
+    "coverage": 0.777,
+    "coverage_unmasked": 1.0,
+    "opacity_mean": 0.119,
+    "map_mean": 0.117,
+    "map_used": 0.199,
+    "n_with_coverage": 176
+   },
+   "precip": {
+    "kind": "none",
+    "amount": [0.0, 0.0],
+    "kind_value": [0.0, 0.0],
+    "band_m": [853, 3413]
+   },
+   "sun": {
+    "elev_deg": 10.0,
+    "azim_deg": 130.0,
+    "dir": [-0.7544, 0.1736, 0.633],
+    "second_pair_deg": [10.0, 130.0]
+   },
+   "fog_m": {
+    "A": [0, 6656],
+    "B": [0, 6656]
+   },
+   "run": {
+    "camera_alt_m": [644, 644],
+    "set_blend_t": [0.001, 0.023],
+    "precip_seen": [0.0, 0.0]
+   }
+  },
+  {
+   "mission": 15,
+   "name": "The Talon of Ruin",
+   "stage": 24,
+   "source": "zero_cp_r15.log",
+   "c1": {
+    "base_m": 76,
+    "top_m": 4253,
+    "coverage": 0.612,
+    "coverage_unmasked": 1.0,
+    "type": 0.01,
+    "transp": 0.0,
+    "precip_max": 0.2,
+    "sun_dir": [-0.4698, 0.5736, 0.671]
+   },
+   "clouds": {
+    "type_word": "0x003",
+    "field_on": true,
+    "variants": 4,
+    "count": 140,
+    "count_hi": 56,
+    "alpha": 128,
+    "wind_mps": [83.33, -0.0],
+    "wind_speed_mps": 83.33,
+    "wind_heading_deg": 90.0,
+    "lit_rgb": [185, 186, 175],
+    "shadow_rgb": [41, 51, 65],
+    "desc_08_m": 4167,
+    "variant_y_m": [[ 1900, 410, 1.6 ], [ 2067, 444, 1.5 ], [ 2233, 478, 1.6 ], [ 2392, 410, 1.4 ]],
+    "centre_m": [1732, 2173, 2543],
+    "sprite_m": [6376, 8778, 11185],
+    "radius_m": [2586, 4895, 7174],
+    "height_m": [1671, 2300, 2930],
+    "band_m": [76, 4253],
+    "build_width_fw": [1.0, 1.0, 0.417, 1.0],
+    "coverage": 0.612,
+    "coverage_unmasked": 1.0,
+    "opacity_mean": 0.087,
+    "map_mean": 0.091,
+    "map_used": 0.168,
+    "n_with_coverage": 108
+   },
+   "precip": {
+    "kind": "rain",
+    "amount": [0.0, 0.2],
+    "kind_value": [0.0, 0.1],
+    "band_m": [853, 3413]
+   },
+   "sun": {
+    "elev_deg": 35.0,
+    "azim_deg": 145.0,
+    "dir": [-0.4698, 0.5736, 0.671],
+    "second_pair_deg": [35.0, 145.0]
+   },
+   "fog_m": {
+    "A": [-725, 7253],
+    "B": [-725, 7253]
+   },
+   "run": {
+    "camera_alt_m": [308, 309],
+    "set_blend_t": [0.0, 0.0],
+    "precip_seen": [0.0, 0.0]
+   },
+   "earlier_sets": [
+    {
+     "first_field": 186,
+     "count": 140,
+     "type_word": "0x003",
+     "alpha": 128,
+     "precip": [0.0, 0.2],
+     "sun": [35.0, 145.0]
+    },
+    {
+     "first_field": 2334,
+     "count": 200,
+     "type_word": "0x003",
+     "alpha": 64,
+     "precip": [0.0, 0.0],
+     "sun": [20.0, 124.0]
+    }
+   ]
+  },
+  {
+   "mission": 16,
+   "name": "The Demon of the Round Table",
+   "stage": 25,
+   "source": "zero_cp_m16.log",
+   "c1": {
+    "base_m": 863,
+    "top_m": 4392,
+    "coverage": 0.931,
+    "coverage_unmasked": 1.0,
+    "type": 0.41,
+    "transp": 0.0,
+    "precip_max": 0.6,
+    "sun_dir": [0.1664, 0.766, 0.6209]
+   },
+   "clouds": {
+    "type_word": "0x003",
+    "field_on": true,
+    "variants": 4,
+    "count": 200,
+    "count_hi": 35,
+    "alpha": 128,
+    "wind_mps": [58.93, -58.93],
+    "wind_speed_mps": 83.33,
+    "wind_heading_deg": 135.0,
+    "lit_rgb": [158, 173, 173],
+    "shadow_rgb": [18, 21, 31],
+    "desc_08_m": 4000,
+    "variant_y_m": [[ 2750, 478, 1.3 ], [ 3000, 410, 1.0 ], [ 2500, 341, 1.5 ], [ 2500, 341, 1.0 ]],
+    "centre_m": [2276, 2694, 3178],
+    "sprite_m": [4435, 6518, 9118],
+    "radius_m": [2958, 4348, 6082],
+    "height_m": [1162, 1708, 2389],
+    "band_m": [863, 4392],
+    "build_width_fw": [1.0, 1.0, 1.0, 1.0],
+    "coverage": 0.931,
+    "coverage_unmasked": 1.0,
+    "opacity_mean": 0.215,
+    "map_mean": 0.217,
+    "map_used": 0.498,
+    "n_with_coverage": 200
+   },
+   "precip": {
+    "kind": "rain",
+    "amount": [0.3, 0.6],
+    "kind_value": [0.0, 0.0],
+    "band_m": [2219, 4267]
+   },
+   "sun": {
+    "elev_deg": 50.0,
+    "azim_deg": -165.0,
+    "dir": [0.1664, 0.766, 0.6209],
+    "second_pair_deg": [50.0, -165.0]
+   },
+   "fog_m": {
+    "A": [-2048, 6827],
+    "B": [-2731, 5973]
+   },
+   "run": {
+    "camera_alt_m": [164, 2084],
+    "set_blend_t": [0.0, 0.0],
+    "precip_seen": [0.3, 0.3]
+   },
+   "earlier_sets": [
+    {
+     "first_field": 424,
+     "count": 100,
+     "type_word": "0x003",
+     "alpha": 128,
+     "precip": [0.4, 0.4],
+     "sun": [50.0, -150.0]
+    }
+   ]
+  },
+  {
+   "mission": 17,
+   "name": "Valley of Kings",
+   "stage": 28,
+   "source": "zero_cp_r17.log",
+   "c1": {
+    "base_m": 600,
+    "top_m": 3527,
+    "coverage": 0.138,
+    "coverage_unmasked": 0.869,
+    "type": 0.51,
+    "transp": 0.0,
+    "precip_max": 0.1,
+    "sun_dir": [-0.5198, 0.4226, 0.7424]
+   },
+   "clouds": {
+    "type_word": "0x103",
+    "field_on": true,
+    "variants": 2,
+    "count": 45,
+    "count_hi": 27,
+    "alpha": 128,
+    "wind_mps": [0.0, 0.0],
+    "wind_speed_mps": 0.0,
+    "wind_heading_deg": 0.0,
+    "lit_rgb": [183, 166, 153],
+    "shadow_rgb": [62, 55, 72],
+    "desc_08_m": 4583,
+    "variant_y_m": [[ 2000, 341, 1.0 ], [ 2167, 341, 1.0 ]],
+    "centre_m": [1707, 2023, 2358],
+    "sprite_m": [3984, 5935, 7258],
+    "radius_m": [2657, 3959, 4841],
+    "height_m": [1044, 1555, 1902],
+    "band_m": [600, 3527],
+    "build_width_fw": [1.0, 1.0],
+    "coverage": 0.138,
+    "coverage_unmasked": 0.869,
+    "opacity_mean": 0.071,
+    "map_mean": 0.091,
+    "map_used": 0.168,
+    "n_with_coverage": 36
+   },
+   "precip": {
+    "kind": "snow",
+    "amount": [0.0, 0.1],
+    "kind_value": [0.0, 1.0],
+    "band_m": [2133, 4267]
+   },
+   "sun": {
+    "elev_deg": 25.0,
+    "azim_deg": 145.0,
+    "dir": [-0.5198, 0.4226, 0.7424],
+    "second_pair_deg": [25.0, 145.0]
+   },
+   "fog_m": {
+    "A": [-2731, 3840],
+    "B": [-4096, 3840]
+   },
+   "run": {
+    "camera_alt_m": [218, 850],
+    "set_blend_t": [0.0, 0.0],
+    "precip_seen": [0.0, 0.0]
+   },
+   "earlier_sets": [
+    {
+     "first_field": 178,
+     "count": 120,
+     "type_word": "0x103",
+     "alpha": 128,
+     "precip": [0.0, 0.1],
+     "sun": [25.0, 145.0]
+    },
+    {
+     "first_field": 863,
+     "count": 45,
+     "type_word": "0x103",
+     "alpha": 128,
+     "precip": [0.0, 0.0],
+     "sun": [25.0, 145.0]
+    }
+   ]
+  },
+  {
+   "mission": 18,
+   "name": "ZERO",
+   "stage": 29,
+   "source": "zero_cp_m18.log",
+   "c1": {
+    "base_m": 633,
+    "top_m": 3499,
+    "coverage": 0.392,
+    "coverage_unmasked": 0.996,
+    "type": 0.52,
+    "transp": 0.0,
+    "precip_max": 0.4,
+    "sun_dir": [-0.528, 0.3907, 0.754]
+   },
+   "clouds": {
+    "type_word": "0x103",
+    "field_on": true,
+    "variants": 2,
+    "count": 120,
+    "count_hi": 28,
+    "alpha": 128,
+    "wind_mps": [0.0, 0.0],
+    "wind_speed_mps": 0.0,
+    "wind_heading_deg": 0.0,
+    "lit_rgb": [183, 166, 153],
+    "shadow_rgb": [62, 55, 72],
+    "desc_08_m": 4583,
+    "variant_y_m": [[ 2000, 341, 1.0 ], [ 2167, 341, 1.0 ]],
+    "centre_m": [1787, 2049, 2315],
+    "sprite_m": [4171, 5878, 7328],
+    "radius_m": [2782, 3921, 4888],
+    "height_m": [1093, 1540, 1920],
+    "band_m": [633, 3499],
+    "build_width_fw": [1.0, 1.0],
+    "coverage": 0.392,
+    "coverage_unmasked": 0.996,
+    "opacity_mean": 0.09,
+    "map_mean": 0.091,
+    "map_used": 0.168,
+    "n_with_coverage": 94
+   },
+   "precip": {
+    "kind": "snow",
+    "amount": [0.1, 0.4],
+    "kind_value": [1.0, 1.0],
+    "band_m": [1877, 3328]
+   },
+   "sun": {
+    "elev_deg": 23.0,
+    "azim_deg": 145.0,
+    "dir": [-0.528, 0.3907, 0.754],
+    "second_pair_deg": [23.0, 145.0]
+   },
+   "fog_m": {
+    "A": [-2731, 3840],
+    "B": [-4096, 3840]
+   },
+   "run": {
+    "camera_alt_m": [1834, 1834],
+    "set_blend_t": [0.0, 0.0],
+    "precip_seen": [0.1, 0.1]
+   }
+  }
+ ]
+}

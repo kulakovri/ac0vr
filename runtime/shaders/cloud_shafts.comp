@@ -1,0 +1,85 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+/* cloud_shafts.comp - light shafts in the haze (ACZ_VR_CLOUD_SHAFTS, cl_split 2026-10-30, bug #250; ps2_clouds.c).
+   a trueSKY-based game keeps two sun-aligned inscatter volumes (128x64x16 and 64x64x16, "godrays", updated 16x8 texels a frame)
+   that darken the atmosphere's in-scattered light where clouds shadow the air. Here the same effect for the game's own
+   haze, eye-independent: an octahedral direction map (cl_dir_uv, full sphere) marched from the frame's centre eye
+   through the cloud shadow map (cl_sun_shadow: the sun's transmittance through our cloud layer at any point) in a few
+   rows a frame. The shafts live in the air under the cloud band (below C1's base: where the clouds' shadows stand as
+   columns); per texel, at four distances t_i along its ray, the signed shadow excess of that air in front of t_i:
+     D(t_i) = K w(c) integral over [0, t_i] of zone(t) rho(alt) ((1 - V) - sigma) / (fog_far - fog_near) dt
+   -- the game's fog accounting (its haze grows linearly from fog_near to fog_far: 1 / (far - near) of the full haze per
+   metre, nothing beyond fog_far), zone = the part of the ray below the band base (exact entry / exit distances, so the
+   result is continuous in the direction), V the sun's transmittance there, sigma the mean shadow of the air around the
+   eye (reference() below: an overcast deck or a uniformly shaded area changes nothing, the game's fog colour already
+   being that sky's haze),
+   rho(alt) = the haze's thinning above the eye (exp(-(alt - eye alt) / H), 1 below), w(c) a forward-scattering phase
+   weight on the ray's angle to the sun (c = cos; Henyey-Greenstein mixed with an isotropic part, capped). M samples
+   spread evenly over the zone, each standing for its segment (exact overlaps with [0, t_i] and the fog range). The far
+   composite (cloud_comp.frag) interpolates D at the scene's distance (the cloud's front where a cloud covers it) and
+   darkens the frame by D > 0 (shaded air) or adds the fog colour for D < 0 (sunlit air amid shade). No jitter: the
+   shadow map is smooth (78 m texels), so nothing shimmers; both eyes share the map. */
+#include "cloud_common.glsl"
+layout(local_size_x = 8, local_size_y = 8) in;
+layout(set = 0, binding = 24, rgba16f) uniform image2D cl_shaft_img;
+/* i0: x map size N, y first row of this slice, z rows in the slice, w samples per ray
+   f0: x K (strength x (1 - shadowed haze brightness)), y sigma (area mean shadow), z H (m), w the march end (m)
+   f1: x fog near (m), y fog far (m), z HG g, w the phase's mix (0 isotropic .. 1 HG) */
+layout(push_constant) uniform PC { ivec4 i0; ivec4 i1; vec4 f0; vec4 f1; } pc;
+
+float overlap(float a0, float a1, float b0, float b1) { return max(min(a1, b1) - max(a0, b0), 0.0); }
+
+/* sigma, the reference shadow (the mean the game's haze colour stands for): the mean of (1 - V) over the air around
+   the eye -- 128 points on a horizontal disc of the march's radius (16 azimuths x 8 radii, as rays weigh distance) at
+   the eye's altitude, or 50 m under the band base when the eye is above it. Every workgroup computes it alike (2 lookups
+   a thread). A uniformly shaded area (overcast) then changes nothing, and the mean over the horizon is zero: only the
+   shafts' contrast remains. f0.y < 0: this reference; >= 0: that value (ACZ_VR_CLOUD_SHAFTS_REF). */
+shared float s_ref[64];
+float reference(uint li) {
+    float tend = pc.f0.w, y = min(cl.origin.y, cl.band.x - 50.0) - cl.origin.y, acc = 0.0;
+    for (uint k = 0u; k < 2u; k++) {
+        uint i = li * 2u + k, az = i & 15u, rr = i >> 4u;
+        float a = 6.2831853 * (float(az) + 0.5 * float(rr & 1u)) / 16.0, r = (float(rr) + 0.5) / 8.0 * tend;
+        acc += 1.0 - cl_sun_shadow(vec3(cos(a) * r, y, sin(a) * r));
+    }
+    s_ref[li] = acc;
+    barrier();
+    float s = 0.0;
+    for (int i = 0; i < 64; i++) s += s_ref[i];
+    return s / 128.0;
+}
+
+void main() {
+    ivec2 px = ivec2(gl_GlobalInvocationID.x, int(gl_GlobalInvocationID.y) + pc.i0.y);
+    int N = pc.i0.x;
+    float sigma = pc.f0.y >= 0.0 ? pc.f0.y : reference(gl_LocalInvocationIndex);   /* (uniform: every thread passes) */
+    if (px.x >= N || px.y >= N || int(gl_GlobalInvocationID.y) >= pc.i0.z) return;
+    vec3 d = cl_uv_dir((vec2(px) + 0.5) / float(N));
+    float tend = pc.f0.w, fn = max(pc.f1.x, 0.0), ff = pc.f1.y;
+    float inv = 1.0 / max(pc.f1.y - pc.f1.x, 1.0);
+    /* the zone: the ray's part below the band base, within the march end */
+    float y0 = cl.origin.y, base = cl.band.x, ta = 0.0, tb = tend;
+    if (y0 < base) { if (d.y > 1.0e-4) tb = min(tb, (base - y0) / d.y); }
+    else if (d.y < -1.0e-4) ta = (base - y0) / d.y;
+    else tb = 0.0;
+    vec4 o = vec4(0.0);
+    if (tb > ta) {
+        int M = max(pc.i0.w, 4);
+        float dt = (tb - ta) / float(M);
+        float H = max(pc.f0.z, 1.0);
+        vec4 tq = cl.shaft[0];                       /* the four distances */
+        for (int j = 0; j < M; j++) {
+            float a = ta + float(j) * dt, b = a + dt, t = a + 0.5 * dt;
+            float wf = overlap(a, b, fn, ff);         /* (the part inside the game's fog range) */
+            if (wf <= 0.0) continue;
+            vec3 p = d * t;
+            float rho = min(1.0, exp(-p.y / H));
+            float e = rho * ((1.0 - cl_sun_shadow(p)) - sigma) * inv * (wf / dt);
+            o += e * vec4(overlap(a, b, 0.0, tq.x), overlap(a, b, 0.0, tq.y), overlap(a, b, 0.0, tq.z), overlap(a, b, 0.0, tq.w));
+        }
+    }
+    /* the phase weight: 4 pi HG(g, c) (mean 1 over the sphere), capped at 4, mixed with the isotropic 1 */
+    float g = pc.f1.z, c = dot(d, cl.sun.xyz);
+    float hg = (1.0 - g * g) / pow(max(1.0 + g * g - 2.0 * g * c, 1.0e-4), 1.5);
+    imageStore(cl_shaft_img, px, o * (mix(1.0, min(hg, 4.0), pc.f1.w) * pc.f0.x));
+}

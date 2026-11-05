@@ -1,0 +1,1872 @@
+{
+ "0x002F9690": {
+  "name": "sceGsResetGraph",
+  "lib": "libgraph.a; xmatch AC5 0x0032C378 fuzzy 0.82",
+  "words": 0
+ },
+ "0x002F9820": {
+  "name": "sceGsGetGParam",
+  "lib": "libgraph.a (aligned); xmatch AC5 0x0032C508 exact",
+  "words": 3
+ },
+ "0x002F9830": {
+  "name": "sceGsResetPath",
+  "lib": "libgraph.a; xmatch AC5 0x0032C518 exact",
+  "words": 26
+ },
+ "0x002F9898": {
+  "name": "checkModelVersion",
+  "lib": "libgraph.a; xmatch AC5 0x0032C580 exact",
+  "words": 40
+ },
+ "0x002F9938": {
+  "name": "_GetGsDxDyOffset",
+  "lib": "libgraph.a (anchored); xmatch AC5 0x0032C620 exact",
+  "words": 4
+ },
+ "0x002F9948": {
+  "name": "sceGsSetDefDispEnv",
+  "lib": "libgraph.a; xmatch AC5 0x0032C630 near",
+  "words": 221
+ },
+ "0x002F9CC0": {
+  "name": "sceGsPutDispEnv",
+  "lib": "libgraph.a; xmatch AC5 0x0032C9A8 exact",
+  "words": 47
+ },
+ "0x002F9D80": {
+  "name": "sceGsSyncV",
+  "lib": "libgraph.a; xmatch AC5 0x0032CA68 exact",
+  "words": 37
+ },
+ "0x002F9E18": {
+  "name": "sceGsSyncPath",
+  "lib": "libgraph.a; xmatch AC5 0x0032CB00 exact",
+  "words": 197
+ },
+ "0x002FA130": {
+  "name": "sceGsSetDefStoreImage",
+  "lib": "libgraph.a; xmatch AC5 0x0032CE18 exact",
+  "words": 80
+ },
+ "0x002FA270": {
+  "name": "sceGsExecStoreImage",
+  "lib": "libgraph.a; xmatch AC5 0x0032CF58 exact",
+  "words": 39
+ },
+ "0x002FA900": {
+  "name": "WaitDma",
+  "lib": "libdma.a; xmatch AC5 0x0032D5E8 exact",
+  "words": 28
+ },
+ "0x002FA970": {
+  "name": "WatchDma",
+  "lib": "libdma.a; xmatch AC5 0x0032D658 exact",
+  "words": 33
+ },
+ "0x002FA9F8": {
+  "name": "CheckAddress",
+  "lib": "libdma.a; xmatch AC5 0x0032D6E0 exact",
+  "words": 10
+ },
+ "0x002FAA20": {
+  "name": "memclr",
+  "lib": "libdma.a; xmatch AC5 0x0032D708 exact",
+  "words": 13
+ },
+ "0x002FAA58": {
+  "name": "sceDmaGetChan",
+  "lib": "libdma.a; xmatch AC5 0x0032D740 exact",
+  "words": 10
+ },
+ "0x002FAA80": {
+  "name": "sceDmaReset",
+  "lib": "libdma.a; xmatch AC5 0x0032D768 exact",
+  "words": 55
+ },
+ "0x002FAB60": {
+  "name": "sceDmaPutEnv",
+  "lib": "libdma.a; xmatch AC5 0x0032D848 near",
+  "words": 118
+ },
+ "0x002FAD88": {
+  "name": "sceDmaSend",
+  "lib": "libdma.a; xmatch AC5 0x0032DA70 exact",
+  "words": 26
+ },
+ "0x002FADF0": {
+  "name": "sceDmaSendN",
+  "lib": "libdma.a; xmatch AC5 0x0032DAD8 exact",
+  "words": 29
+ },
+ "0x002FAE68": {
+  "name": "sceDmaSendI",
+  "lib": "libdma.a; xmatch AC5 0x0032DB50 exact",
+  "words": 29
+ },
+ "0x002FAEE0": {
+  "name": "sceDmaRecv",
+  "lib": "libdma.a; xmatch AC5 0x0032DBC8 exact",
+  "words": 18
+ },
+ "0x002FAF28": {
+  "name": "sceDmaRecvN",
+  "lib": "libdma.a; xmatch AC5 0x0032DC10 exact",
+  "words": 31
+ },
+ "0x002FAFA8": {
+  "name": "sceDmaRecvI",
+  "lib": "libdma.a; xmatch AC5 0x0032DC90 exact",
+  "words": 32
+ },
+ "0x002FB028": {
+  "name": "sceDmaSync",
+  "lib": "libdma.a; xmatch AC5 0x0032DD10 exact",
+  "words": 14
+ },
+ "0x002FB060": {
+  "name": "sceDmaWatch",
+  "lib": "libdma.a; xmatch AC5 0x0032DD48 exact",
+  "words": 13
+ },
+ "0x002FB098": {
+  "name": "sceDmaPause",
+  "lib": "libdma.a; xmatch AC5 0x0032DD80 exact",
+  "words": 38
+ },
+ "0x002FB148": {
+  "name": "sceVu0ApplyMatrix",
+  "lib": "libvu0.a (aligned); xmatch AC5 0x0032DE30 vu0sig 1.00",
+  "words": 0
+ },
+ "0x002FB178": {
+  "name": "sceVu0MulMatrix",
+  "lib": "libvu0.a (aligned); xmatch AC5 0x0032DEB0 vu0sig 1.00",
+  "words": 0
+ },
+ "0x002FB1C0": {
+  "name": "sceVu0OuterProduct",
+  "lib": "libvu0.a (aligned); xmatch AC5 0x0032DF40 vu0sig 1.00",
+  "words": 0
+ },
+ "0x002FB1E0": {
+  "name": "sceVu0InnerProduct",
+  "lib": "libvu0.a (aligned); xmatch AC5 0x0032DFB0 vu0sig 1.00",
+  "words": 0
+ },
+ "0x002FB208": {
+  "name": "sceVu0Normalize",
+  "lib": "libvu0.a (aligned); xmatch AC5 0x0032E020 vu0sig 1.00",
+  "words": 0
+ },
+ "0x002FB248": {
+  "name": "sceVu0TransposeMatrix",
+  "lib": "libvu0.a (aligned); xmatch AC5 0x0032E0A0 callgraph 0.36",
+  "words": 0
+ },
+ "0x002FB290": {
+  "name": "sceVu0InversMatrix",
+  "lib": "libvu0.a (aligned); xmatch AC5 0x0032E128 vu0sig 1.00",
+  "words": 0
+ },
+ "0x002FB300": {
+  "name": "sceVu0DivVector",
+  "lib": "libvu0.a (aligned); xmatch AC5 0x0032E1D8 vu0sig 1.00",
+  "words": 0
+ },
+ "0x002FB320": {
+  "name": "sceVu0DivVectorXYZ",
+  "lib": "libvu0.a (aligned); xmatch AC5 0x0032E248 vu0sig 1.00",
+  "words": 0
+ },
+ "0x002FB340": {
+  "name": "sceVu0InterVector",
+  "lib": "libvu0.a (aligned); xmatch AC5 0x0032E2B8 vu0sig 1.00",
+  "words": 0
+ },
+ "0x002FB368": {
+  "name": "sceVu0AddVector",
+  "lib": "libvu0.a (aligned); xmatch AC5 0x0032E340 vu0sig 1.00",
+  "words": 0
+ },
+ "0x002FB380": {
+  "name": "sceVu0SubVector",
+  "lib": "libvu0.a (aligned); xmatch AC5 0x0032E3A8 vu0sig 1.00",
+  "words": 0
+ },
+ "0x002FB398": {
+  "name": "sceVu0MulVector",
+  "lib": "libvu0.a (aligned); xmatch AC5 0x0032E410 vu0sig 1.00",
+  "words": 0
+ },
+ "0x002FB3B0": {
+  "name": "sceVu0ScaleVector",
+  "lib": "libvu0.a (aligned); xmatch AC5 0x0032E478 vu0sig 1.00",
+  "words": 0
+ },
+ "0x002FB3C8": {
+  "name": "sceVu0TransMatrix",
+  "lib": "libvu0.a (aligned); xmatch AC5 0x0032E4E0 vu0sig 1.00",
+  "words": 0
+ },
+ "0x002FB3F8": {
+  "name": "sceVu0CopyVector",
+  "lib": "libvu0.a (aligned); xmatch AC5 0x0032E560 callgraph 0.09",
+  "words": 0
+ },
+ "0x002FB408": {
+  "name": "sceVu0CopyMatrix",
+  "lib": "libvu0.a (aligned); xmatch AC5 0x0032E5B0 layout 0.06",
+  "words": 0
+ },
+ "0x002FB430": {
+  "name": "sceVu0FTOI4Vector",
+  "lib": "libvu0.a (aligned); xmatch AC5 0x0032E618 vu0sig 1.00",
+  "words": 0
+ },
+ "0x002FB440": {
+  "name": "sceVu0Normalize",
+  "lib": "libvu0.a (anchored); xmatch AC5 0x0032E668 vu0sig 1.00",
+  "words": 0
+ },
+ "0x002FB450": {
+  "name": "sceVu0ITOF4Vector",
+  "lib": "libvu0.a (aligned); xmatch AC5 0x0032E6B8 vu0sig 1.00",
+  "words": 0
+ },
+ "0x002FB460": {
+  "name": "sceVu0ITOF0Vector",
+  "lib": "libvu0.a (aligned); xmatch AC5 0x0032E708 vu0sig 1.00",
+  "words": 0
+ },
+ "0x002FB470": {
+  "name": "sceVu0UnitMatrix",
+  "lib": "libvu0.a (aligned); xmatch AC5 0x0032E758 vu0sig 1.00",
+  "words": 0
+ },
+ "0x002FB498": {
+  "name": "_sceVu0ecossin",
+  "lib": "libvu0.a; xmatch AC5 0x0032E7B0 exact",
+  "words": 29
+ },
+ "0x002FB510": {
+  "name": "sceVu0TransMatrix",
+  "lib": "libvu0.a (anchored); xmatch AC5 0x0032E828 vu0sig 1.00",
+  "words": 0
+ },
+ "0x002FB5B8": {
+  "name": "sceVu0RotMatrixX",
+  "lib": "libvu0.a (aligned); xmatch AC5 0x0032E918 vu0sig 1.00",
+  "words": 0
+ },
+ "0x002FB660": {
+  "name": "sceVu0RotMatrixY",
+  "lib": "libvu0.a (aligned); xmatch AC5 0x0032EA10 vu0sig 1.00",
+  "words": 0
+ },
+ "0x002FB708": {
+  "name": "sceVu0RotMatrix",
+  "lib": "libvu0.a; xmatch AC5 0x0032EB08 exact",
+  "words": 20
+ },
+ "0x002FB758": {
+  "name": "sceVu0ClampVector",
+  "lib": "libvu0.a (aligned); xmatch AC5 0x0032EB58 vu0sig 1.00",
+  "words": 0
+ },
+ "0x002FB780": {
+  "name": "sceVu0CameraMatrix",
+  "lib": "libvu0.a; xmatch AC5 0x0032EBE0 exact",
+  "words": 44
+ },
+ "0x002FB830": {
+  "name": "sceVu0NormalLightMatrix",
+  "lib": "libvu0.a; xmatch AC5 0x0032EC90 exact",
+  "words": 48
+ },
+ "0x002FB8F0": {
+  "name": "sceVu0LightColorMatrix",
+  "lib": "libvu0.a; xmatch AC5 0x0032ED50 exact",
+  "words": 26
+ },
+ "0x002FB958": {
+  "name": "sceVu0ViewScreenMatrix",
+  "lib": "libvu0.a; xmatch AC5 0x0032EDB8 exact",
+  "words": 65
+ },
+ "0x002FBC48": {
+  "name": "sceVu0RotTransPersN",
+  "lib": "libvu0.a (anchored); xmatch AC5 0x0032F050 vu0sig 1.00",
+  "words": 0
+ },
+ "0x002FBC90": {
+  "name": "sceVu0RotTransPersN",
+  "lib": "libvu0.a (aligned); xmatch AC5 0x0032F118 layout 0.04",
+  "words": 0
+ },
+ "0x002FBCB0": {
+  "name": "sceVu0RotTransPers",
+  "lib": "libvu0.a (aligned); xmatch AC5 0x0032F1E0 vu0sig 1.00",
+  "words": 0
+ },
+ "0x002FBCE0": {
+  "name": "sceVu0CopyVectorXYZ",
+  "lib": "libvu0.a (aligned); xmatch AC5 0x0032F270 vu0sig 1.00",
+  "words": 0
+ },
+ "0x002FBCF8": {
+  "name": "sceVu0InterVectorXYZ",
+  "lib": "libvu0.a (aligned); xmatch AC5 0x0032F2D8 vu0sig 1.00",
+  "words": 0
+ },
+ "0x002FBD40": {
+  "name": "sceVu0ScaleVectorXYZ",
+  "lib": "libvu0.a (aligned); xmatch AC5 0x0032F358 vu0sig 1.00",
+  "words": 0
+ },
+ "0x002FBDA0": {
+  "name": "sceVu0ClipScreen",
+  "lib": "libvu0.a (aligned); xmatch AC5 0x0032F408 vu0sig 1.00",
+  "words": 0
+ },
+ "0x002FC760": {
+  "name": "sceResetttyinit",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x0032FE20 exact",
+  "words": 3
+ },
+ "0x002FC770": {
+  "name": "VSync",
+  "lib": "libkernl.a; xmatch AC5 0x0032FE30 exact",
+  "words": 36
+ },
+ "0x002FC800": {
+  "name": "VSync2",
+  "lib": "libkernl.a; xmatch AC5 0x0032FEC0 exact",
+  "words": 41
+ },
+ "0x002FC8A8": {
+  "name": "write",
+  "lib": "libkernl.a; xmatch AC5 0x0032FF68 exact",
+  "words": 31
+ },
+ "0x002FC928": {
+  "name": "read",
+  "lib": "libkernl.a; xmatch AC5 0x0032FFE8 exact",
+  "words": 29
+ },
+ "0x002FC9A0": {
+  "name": "open",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x00330060 exact",
+  "words": 10
+ },
+ "0x002FC9C8": {
+  "name": "close",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x00330088 exact",
+  "words": 2
+ },
+ "0x002FC9D0": {
+  "name": "ioctl",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x00330090 exact",
+  "words": 2
+ },
+ "0x002FC9D8": {
+  "name": "lseek",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x00330098 exact",
+  "words": 2
+ },
+ "0x002FC9E0": {
+  "name": "sbrk",
+  "lib": "libkernl.a; xmatch AC5 0x003300A0 exact",
+  "words": 43
+ },
+ "0x002FCA90": {
+  "name": "isatty",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x00330150 exact",
+  "words": 2
+ },
+ "0x002FCA98": {
+  "name": "fstat",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x00330158 exact",
+  "words": 5
+ },
+ "0x002FCAB8": {
+  "name": "kill",
+  "lib": "libkernl.a; xmatch AC5 0x00330178 exact",
+  "words": 10
+ },
+ "0x002FCAE0": {
+  "name": "stat",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x003301A0 exact",
+  "words": 10
+ },
+ "0x002FCB08": {
+  "name": "unlink",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x003301C8 exact",
+  "words": 10
+ },
+ "0x002FCB30": {
+  "name": "_sceSDC",
+  "lib": "libkernl.a; xmatch AC5 0x00388710 exact",
+  "words": 41
+ },
+ "0x002FCBD8": {
+  "name": "SyncDCache",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x003887B8 exact",
+  "words": 31
+ },
+ "0x002FCC70": {
+  "name": "_sceIDC",
+  "lib": "libkernl.a; xmatch AC5 0x00388850 exact",
+  "words": 41
+ },
+ "0x002FCD18": {
+  "name": "InvalidDCache",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x003888F8 exact",
+  "words": 31
+ },
+ "0x002FCFE0": {
+  "name": "topThread",
+  "lib": "libkernl.a; xmatch AC5 0x00339270 exact",
+  "words": 54
+ },
+ "0x002FD0B8": {
+  "name": "InitThread",
+  "lib": "libkernl.a (aligned); xmatch AC5 0x00339348 callgraph 0.77",
+  "words": 0
+ },
+ "0x002FD1A8": {
+  "name": "iWakeupThread",
+  "lib": "libkernl.a; xmatch AC5 0x00339420 exact",
+  "words": 37
+ },
+ "0x002FD240": {
+  "name": "iRotateThreadReadyQueue",
+  "lib": "libkernl.a; xmatch AC5 0x003394B8 exact",
+  "words": 31
+ },
+ "0x002FD2C0": {
+  "name": "iSuspendThread",
+  "lib": "libkernl.a; xmatch AC5 0x00339538 exact",
+  "words": 38
+ },
+ "0x002FD358": {
+  "name": "DelayThread",
+  "lib": "libkernl.a; xmatch AC5 0x003395D0 near",
+  "words": 50
+ },
+ "0x002FD598": {
+  "name": "StartThread",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x00339698 exact",
+  "words": 10
+ },
+ "0x002FD5C0": {
+  "name": "QueueInit",
+  "lib": "libkernl.a; xmatch AC5 0x00330420 exact",
+  "words": 9
+ },
+ "0x002FD5E8": {
+  "name": "QueuePeekWriteDone",
+  "lib": "libkernl.a; xmatch AC5 0x00330448 exact",
+  "words": 15
+ },
+ "0x002FD628": {
+  "name": "QueuePeekReadDone",
+  "lib": "libkernl.a; xmatch AC5 0x00330488 exact",
+  "words": 15
+ },
+ "0x002FD668": {
+  "name": "sceTtyHandler",
+  "lib": "libkernl.a; xmatch AC5 0x003304C8 exact",
+  "words": 101
+ },
+ "0x002FD800": {
+  "name": "sceTtyWrite",
+  "lib": "libkernl.a; xmatch AC5 0x00330660 exact",
+  "words": 93
+ },
+ "0x002FD978": {
+  "name": "sceTtyRead",
+  "lib": "libkernl.a; xmatch AC5 0x003307D8 exact",
+  "words": 52
+ },
+ "0x002FDA48": {
+  "name": "sceTtyInit",
+  "lib": "libkernl.a; xmatch AC5 0x003308A8 exact",
+  "words": 47
+ },
+ "0x002FDB08": {
+  "name": "kputchar",
+  "lib": "libkernl.a (aligned); xmatch AC5 0x00330968 callgraph 0.90",
+  "words": 0
+ },
+ "0x002FDB40": {
+  "name": "deci2Putchar",
+  "lib": "libkernl.a; xmatch AC5 0x003309A8 near",
+  "words": 44
+ },
+ "0x002FDBF0": {
+  "name": "serialPutchar",
+  "lib": "libkernl.a; xmatch AC5 0x00330A58 exact",
+  "words": 13
+ },
+ "0x002FDC28": {
+  "name": "ftoi",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x00330A90 near",
+  "words": 37
+ },
+ "0x002FDCB8": {
+  "name": "printfloat",
+  "lib": "libkernl.a (aligned); xmatch AC5 0x00330B28 layout 0.54",
+  "words": 0
+ },
+ "0x002FDF10": {
+  "name": "_sceSnprintf_pf",
+  "lib": "libkernl.a (aligned); xmatch AC5 0x00330CF0 layout 0.71",
+  "words": 0
+ },
+ "0x002FEE90": {
+  "name": "sceSifInitRpc",
+  "lib": "libkernl.a; xmatch AC5 0x00331320 exact",
+  "words": 103
+ },
+ "0x002FF030": {
+  "name": "sceSifExitRpc",
+  "lib": "libkernl.a; xmatch AC5 0x003314C0 exact",
+  "words": 9
+ },
+ "0x002FF058": {
+  "name": "_sceRpcGetPacket",
+  "lib": "libmrpc.a; xmatch AC5 0x003314E8 exact",
+  "words": 42
+ },
+ "0x002FF100": {
+  "name": "_sceRpcFreePacket",
+  "lib": "libmrpc.a; xmatch AC5 0x00331590 exact",
+  "words": 7
+ },
+ "0x002FF120": {
+  "name": "_sceRpcGetFPacket",
+  "lib": "libkernl.a; xmatch AC5 0x003315B0 exact",
+  "words": 12
+ },
+ "0x002FF150": {
+  "name": "_sceRpcGetFPacket2",
+  "lib": "libkernl.a; xmatch AC5 0x003315E0 exact",
+  "words": 16
+ },
+ "0x002FF190": {
+  "name": "_request_end",
+  "lib": "sifrpc.o+0x300, masked-sig; xmatch AC5 0x00331620 exact",
+  "words": 51
+ },
+ "0x002FF260": {
+  "name": "_alarm_rdata",
+  "lib": "sifrpc.o+0x3D0, masked-sig; xmatch AC5 0x003316F0 exact",
+  "words": 16
+ },
+ "0x002FF2A0": {
+  "name": "_request_rdata",
+  "lib": "sifrpc.o+0x410, masked-sig; xmatch AC5 0x00331730 exact",
+  "words": 52
+ },
+ "0x002FF370": {
+  "name": "sceSifGetOtherData",
+  "lib": "sifrpc.o+0x4E0, order-aligned; xmatch AC5 0x00331800 fuzzy 0.94",
+  "words": 0
+ },
+ "0x002FF4D8": {
+  "name": "_search_svdata",
+  "lib": "sifrpc.o+0x648, masked-sig; xmatch AC5 0x00331958 exact",
+  "words": 19
+ },
+ "0x002FF528": {
+  "name": "_alarm_bind",
+  "lib": "sifrpc.o+0x698, masked-sig; xmatch AC5 0x003319A8 exact",
+  "words": 16
+ },
+ "0x002FF568": {
+  "name": "_request_bind",
+  "lib": "sifrpc.o+0x6D8, masked-sig; xmatch AC5 0x003319E8 exact",
+  "words": 51
+ },
+ "0x002FF638": {
+  "name": "sceSifBindRpc",
+  "lib": "sifrpc.o+0x7A8; IDA: sends SIF cmd 0x80000009, writes cd->command/serve/tid; xmatch AC5 0x00331AB8 callgraph 0.93",
+  "words": 0
+ },
+ "0x002FF788": {
+  "name": "_request_call",
+  "lib": "sifrpc.o+0x8F8, masked-sig; xmatch AC5 0x00331BF8 exact",
+  "words": 35
+ },
+ "0x002FF818": {
+  "name": "sceSifCallRpc",
+  "lib": "sifrpc.o+0x988; IDA: sends SIF cmd 0x8000000A, stores gp/func/para at cd+24/28/32; xmatch AC5 0x00331C88 callgraph 0.96",
+  "words": 0
+ },
+ "0x002FFA18": {
+  "name": "sceSifCheckStatRpc",
+  "lib": "libkernl.a; xmatch AC5 0x00331E80 exact",
+  "words": 15
+ },
+ "0x002FFA58": {
+  "name": "sceSifSetRpcQueue",
+  "lib": "libkernl.a; xmatch AC5 0x00331EC0 exact",
+  "words": 37
+ },
+ "0x002FFAF0": {
+  "name": "sceSifRegisterRpc",
+  "lib": "libkernl.a; xmatch AC5 0x00331F58 exact",
+  "words": 52
+ },
+ "0x002FFBC0": {
+  "name": "sceSifRemoveRpc",
+  "lib": "libkernl.a; xmatch AC5 0x00332028 exact",
+  "words": 37
+ },
+ "0x002FFC58": {
+  "name": "sceSifRemoveRpcQueue",
+  "lib": "libkernl.a; xmatch AC5 0x003320C0 exact",
+  "words": 36
+ },
+ "0x002FFCE8": {
+  "name": "sceSifGetNextRequest",
+  "lib": "libkernl.a; xmatch AC5 0x00332150 exact",
+  "words": 22
+ },
+ "0x002FFD40": {
+  "name": "sceSifExecRequest",
+  "lib": "libkernl.a; xmatch AC5 0x003321A8 exact",
+  "words": 89
+ },
+ "0x002FFEB8": {
+  "name": "new_iob",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x00332320 exact",
+  "words": 12
+ },
+ "0x002FFF08": {
+  "name": "sceSifRpcLoop",
+  "lib": "libkernl.a; xmatch AC5 0x00332370 exact",
+  "words": 16
+ },
+ "0x00300038": {
+  "name": "new_iob",
+  "lib": "libkernl.a; xmatch AC5 0x00332410 exact",
+  "words": 34
+ },
+ "0x003001B0": {
+  "name": "get_iob",
+  "lib": "libkernl.a; xmatch AC5 0x00332498 near",
+  "words": 27
+ },
+ "0x00300220": {
+  "name": "_sceFs_Rcv_Intr",
+  "lib": "libkernl.a; xmatch AC5 0x00332508 exact",
+  "words": 50
+ },
+ "0x003005D8": {
+  "name": "_sceFsSemInit",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x003328C0 callgraph 0.75",
+  "words": 0
+ },
+ "0x00300630": {
+  "name": "_sceFsWaitS",
+  "lib": "libkernl.a; xmatch AC5 0x00332910 exact",
+  "words": 11
+ },
+ "0x00300710": {
+  "name": "_sceFs_Poff_Intr",
+  "lib": "libkernl.a; xmatch AC5 0x003329F8 exact",
+  "words": 17
+ },
+ "0x00300758": {
+  "name": "sceFsInit",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x00332A40 callgraph 0.99",
+  "words": 0
+ },
+ "0x00300960": {
+  "name": "_fs_version",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x00332C48 exact",
+  "words": 35
+ },
+ "0x003009F0": {
+  "name": "sceFsReset",
+  "lib": "libkernl.a; xmatch AC5 0x00332CD8 exact",
+  "words": 13
+ },
+ "0x00300C58": {
+  "name": "sceFsSetIopBuf",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x00332D10 callgraph 0.89",
+  "words": 0
+ },
+ "0x00301EF0": {
+  "name": "sceRemove",
+  "lib": "libkernl.a; xmatch AC5 0x00333F70 exact",
+  "words": 7
+ },
+ "0x003020C8": {
+  "name": "sceRmdir",
+  "lib": "libkernl.a; xmatch AC5 0x00334140 exact",
+  "words": 7
+ },
+ "0x00302368": {
+  "name": "sceFormat",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x003343D0 fuzzy 0.84",
+  "words": 0
+ },
+ "0x00302498": {
+  "name": "sceDelDrv",
+  "lib": "libkernl.a; xmatch AC5 0x003344F0 exact",
+  "words": 7
+ },
+ "0x003024B8": {
+  "name": "sceDopen",
+  "lib": "libkernl.a; xmatch AC5 0x00334510 exact",
+  "words": 50
+ },
+ "0x00302E50": {
+  "name": "sceChdir",
+  "lib": "libkernl.a; xmatch AC5 0x00334E68 exact",
+  "words": 7
+ },
+ "0x003032A0": {
+  "name": "sceUmount",
+  "lib": "libkernl.a; xmatch AC5 0x00335290 exact",
+  "words": 7
+ },
+ "0x00303B80": {
+  "name": "sceSifInitIopHeap",
+  "lib": "libkernl.a; xmatch AC5 0x00335AC8 exact",
+  "words": 34
+ },
+ "0x00303C08": {
+  "name": "sceSifAllocIopHeap",
+  "lib": "libkernl.a; xmatch AC5 0x00335B50 exact",
+  "words": 28
+ },
+ "0x00303C78": {
+  "name": "sceSifAllocSysMemory",
+  "lib": "libkernl.a; xmatch AC5 0x00335BC0 exact",
+  "words": 32
+ },
+ "0x00303CF8": {
+  "name": "sceSifFreeSysMemory",
+  "lib": "libkernl.a; xmatch AC5 0x00335C40 exact",
+  "words": 30
+ },
+ "0x00303D70": {
+  "name": "sceSifFreeIopHeap",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x00335CB8 exact",
+  "words": 7
+ },
+ "0x00303D90": {
+  "name": "sceSifLoadIopHeap",
+  "lib": "libkernl.a; xmatch AC5 0x00335CD8 exact",
+  "words": 60
+ },
+ "0x00303E80": {
+  "name": "sceSifQueryMemSize",
+  "lib": "libkernl.a; xmatch AC5 0x00335DC8 exact",
+  "words": 28
+ },
+ "0x00303EF0": {
+  "name": "sceSifQueryMaxFreeMemSize",
+  "lib": "libkernl.a; xmatch AC5 0x00335E38 exact",
+  "words": 28
+ },
+ "0x00303F60": {
+  "name": "sceSifQueryTotalFreeMemSize",
+  "lib": "libkernl.a; xmatch AC5 0x00335EA8 exact",
+  "words": 28
+ },
+ "0x00303FD0": {
+  "name": "sceSifQueryBlockTopAddress",
+  "lib": "libkernl.a; xmatch AC5 0x00335F18 exact",
+  "words": 31
+ },
+ "0x00304050": {
+  "name": "sceSifQueryBlockSize",
+  "lib": "libkernl.a; xmatch AC5 0x00335F98 exact",
+  "words": 31
+ },
+ "0x003040D0": {
+  "name": "_lf_bind",
+  "lib": "libkernl.a; xmatch AC5 0x00336018 exact",
+  "words": 64
+ },
+ "0x003041D0": {
+  "name": "_lf_version",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x00336118 exact",
+  "words": 35
+ },
+ "0x00304260": {
+  "name": "sceSifLoadFileReset",
+  "lib": "libkernl.a; xmatch AC5 0x003361A8 exact",
+  "words": 14
+ },
+ "0x00304298": {
+  "name": "_sceSifLoadModuleBuffer",
+  "lib": "libkernl.a; xmatch AC5 0x003361E0 exact",
+  "words": 130
+ },
+ "0x003044A0": {
+  "name": "sceSifStopModule",
+  "lib": "libkernl.a; xmatch AC5 0x003363E8 exact",
+  "words": 130
+ },
+ "0x003046A8": {
+  "name": "sceSifUnloadModule",
+  "lib": "libkernl.a; xmatch AC5 0x003365F0 exact",
+  "words": 36
+ },
+ "0x00304738": {
+  "name": "sceSifSearchModuleByName",
+  "lib": "libkernl.a; xmatch AC5 0x00336680 near",
+  "words": 40
+ },
+ "0x003047D8": {
+  "name": "sceSifSearchModuleByAddress",
+  "lib": "libkernl.a; xmatch AC5 0x00336720 exact",
+  "words": 36
+ },
+ "0x00304868": {
+  "name": "sceSifLoadModuleBuffer",
+  "lib": "libkernl.a; xmatch AC5 0x003367B0 exact",
+  "words": 7
+ },
+ "0x00304888": {
+  "name": "sceSifLoadStartModuleBuffer",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x003367D0 exact",
+  "words": 7
+ },
+ "0x003048A8": {
+  "name": "_sceSifLoadModule",
+  "lib": "libkernl.a; xmatch AC5 0x003367F0 near",
+  "words": 137
+ },
+ "0x00304AD0": {
+  "name": "sceSifLoadModule",
+  "lib": "libkernl.a; xmatch AC5 0x00336A18 exact",
+  "words": 8
+ },
+ "0x00304AF0": {
+  "name": "sceSifLoadStartModule",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x00336A38 exact",
+  "words": 7
+ },
+ "0x00304B10": {
+  "name": "_sceSifLoadElfPart",
+  "lib": "libkernl.a; xmatch AC5 0x00336A58 near",
+  "words": 65
+ },
+ "0x00304C18": {
+  "name": "sceSifLoadElfPart",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x00336B60 exact",
+  "words": 7
+ },
+ "0x00304C38": {
+  "name": "sceSifLoadElf",
+  "lib": "libkernl.a; xmatch AC5 0x00336B80 exact",
+  "words": 10
+ },
+ "0x00304C60": {
+  "name": "sceSifGetIopAddr",
+  "lib": "libkernl.a; xmatch AC5 0x00336BA8 exact",
+  "words": 59
+ },
+ "0x00304D50": {
+  "name": "sceSifSetIopAddr",
+  "lib": "libkernl.a; xmatch AC5 0x00336C98 exact",
+  "words": 55
+ },
+ "0x00304E30": {
+  "name": "sceSifResetIop",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x00336D78 callgraph 0.98",
+  "words": 0
+ },
+ "0x00304F88": {
+  "name": "sceSifIsAliveIop",
+  "lib": "libkernl.a; xmatch AC5 0x00336ED0 exact",
+  "words": 10
+ },
+ "0x00304FB0": {
+  "name": "sceSifSyncIop",
+  "lib": "libkernl.a; xmatch AC5 0x00336EF8 exact",
+  "words": 20
+ },
+ "0x00305000": {
+  "name": "sceSifRebootIop",
+  "lib": "libkernl.a; xmatch AC5 0x00336F48 exact",
+  "words": 68
+ },
+ "0x00305110": {
+  "name": "DIntr",
+  "lib": "libkernl.a (aligned); xmatch AC5 0x00337058 callgraph 0.93",
+  "words": 0
+ },
+ "0x00305160": {
+  "name": "EIntr",
+  "lib": "libkernl.a; xmatch AC5 0x003370B0 exact",
+  "words": 6
+ },
+ "0x003051D8": {
+  "name": "__sceKernlGetEhSemaId",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x00337110 exact",
+  "words": 3
+ },
+ "0x003051E8": {
+  "name": "Copy",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x00337120 exact",
+  "words": 4
+ },
+ "0x003051F8": {
+  "name": "kCopy",
+  "lib": "libkernl.a; xmatch AC5 0x00337130 exact",
+  "words": 14
+ },
+ "0x00305230": {
+  "name": "kFindAddress",
+  "lib": "libkernl.a; xmatch AC5 0x00337168 exact",
+  "words": 16
+ },
+ "0x00305270": {
+  "name": "FindAddress",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x003371A8 exact",
+  "words": 4
+ },
+ "0x00305280": {
+  "name": "GetSystemCallEntry",
+  "lib": "libkernl.a; xmatch AC5 0x003371B8 exact",
+  "words": 13
+ },
+ "0x003052B8": {
+  "name": "InitSystemCallTableAddress",
+  "lib": "libkernl.a; xmatch AC5 0x003371F0 exact",
+  "words": 63
+ },
+ "0x003053B8": {
+  "name": "setup",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x003372F0 exact",
+  "words": 4
+ },
+ "0x003053C8": {
+  "name": "_InitSys",
+  "lib": "libkernl.a; xmatch AC5 0x00337300 fuzzy 0.99",
+  "words": 0
+ },
+ "0x00305420": {
+  "name": "setup",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x00337358 exact",
+  "words": 4
+ },
+ "0x00305430": {
+  "name": "Copy",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x00337368 exact",
+  "words": 4
+ },
+ "0x00305440": {
+  "name": "kCopy",
+  "lib": "libkernl.a; xmatch AC5 0x00337378 exact",
+  "words": 14
+ },
+ "0x00305478": {
+  "name": "GetEntryAddress",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x003373B0 exact",
+  "words": 4
+ },
+ "0x00305488": {
+  "name": "PatchIsNeeded",
+  "lib": "libkernl.a; xmatch AC5 0x003373C0 exact",
+  "words": 26
+ },
+ "0x003054F0": {
+  "name": "InitExecPS2",
+  "lib": "libkernl.a; xmatch AC5 0x00337428 exact",
+  "words": 43
+ },
+ "0x003055A0": {
+  "name": "Copy",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x003374D8 exact",
+  "words": 4
+ },
+ "0x003055B0": {
+  "name": "kCopy",
+  "lib": "libkernl.a; xmatch AC5 0x003374E8 exact",
+  "words": 12
+ },
+ "0x003055E0": {
+  "name": "setup",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x00337518 exact",
+  "words": 4
+ },
+ "0x003055F0": {
+  "name": "SetArg",
+  "lib": "libkernl.a; xmatch AC5 0x00337528 exact",
+  "words": 70
+ },
+ "0x00305708": {
+  "name": "TerminateLibrary",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x00337640 exact",
+  "words": 2
+ },
+ "0x00305710": {
+  "name": "ExecPS2",
+  "lib": "libkernl.a; xmatch AC5 0x00337648 exact",
+  "words": 28
+ },
+ "0x00305780": {
+  "name": "LoadExecPS2",
+  "lib": "libkernl.a; xmatch AC5 0x003376B8 exact",
+  "words": 18
+ },
+ "0x003057C8": {
+  "name": "Exit",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x00337700 exact",
+  "words": 10
+ },
+ "0x003057F0": {
+  "name": "ExecOSD",
+  "lib": "libkernl.a; xmatch AC5 0x00337728 exact",
+  "words": 19
+ },
+ "0x00305840": {
+  "name": "setup",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x00337778 exact",
+  "words": 4
+ },
+ "0x00305850": {
+  "name": "Copy",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x00337788 exact",
+  "words": 4
+ },
+ "0x00305860": {
+  "name": "kCopy",
+  "lib": "libkernl.a; xmatch AC5 0x00337798 exact",
+  "words": 14
+ },
+ "0x00305898": {
+  "name": "GetEntryAddress",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x003377D0 exact",
+  "words": 4
+ },
+ "0x003058A8": {
+  "name": "InitAlarm",
+  "lib": "libkernl.a; xmatch AC5 0x003377E0 exact",
+  "words": 53
+ },
+ "0x00305980": {
+  "name": "SetT2",
+  "lib": "libkernl.a; xmatch AC5 0x003378B8 exact",
+  "words": 26
+ },
+ "0x003059E8": {
+  "name": "SetT2_COUNT",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x00337920 exact",
+  "words": 2
+ },
+ "0x00305A20": {
+  "name": "InitTimer",
+  "lib": "libkernl.a; xmatch AC5 0x00337958 exact",
+  "words": 85
+ },
+ "0x00305B78": {
+  "name": "EndTimer",
+  "lib": "libkernl.a; xmatch AC5 0x00337AB0 exact",
+  "words": 46
+ },
+ "0x00305C60": {
+  "name": "StartTimerSystemTime",
+  "lib": "libkernl.a; xmatch AC5 0x00337B98 exact",
+  "words": 36
+ },
+ "0x00305CF0": {
+  "name": "StopTimerSystemTime",
+  "lib": "libkernl.a; xmatch AC5 0x00337C28 exact",
+  "words": 31
+ },
+ "0x00305D70": {
+  "name": "SetNextComp",
+  "lib": "libkernl.a; xmatch AC5 0x00337CA8 exact",
+  "words": 100
+ },
+ "0x00305F00": {
+  "name": "InsertAlarm",
+  "lib": "libkernl.a; xmatch AC5 0x00337E38 exact",
+  "words": 33
+ },
+ "0x00305F88": {
+  "name": "UnlinkAlarm",
+  "lib": "libkernl.a; xmatch AC5 0x00337EC0 exact",
+  "words": 14
+ },
+ "0x00306268": {
+  "name": "iGetTimerSystemTime",
+  "lib": "libkernl.a; xmatch AC5 0x00338198 exact",
+  "words": 19
+ },
+ "0x003062B8": {
+  "name": "GetTimerSystemTime",
+  "lib": "libkernl.a; xmatch AC5 0x003381E8 exact",
+  "words": 31
+ },
+ "0x00306338": {
+  "name": "iAllocTimerCounter",
+  "lib": "libkernl.a; xmatch AC5 0x00338268 exact",
+  "words": 28
+ },
+ "0x003063A8": {
+  "name": "AllocTimerCounter",
+  "lib": "libkernl.a; xmatch AC5 0x003382D8 exact",
+  "words": 18
+ },
+ "0x003063F0": {
+  "name": "iFreeTimerCounter",
+  "lib": "libkernl.a; xmatch AC5 0x00338320 near",
+  "words": 40
+ },
+ "0x00306490": {
+  "name": "FreeTimerCounter",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x003383C0 exact",
+  "words": 19
+ },
+ "0x003064E0": {
+  "name": "iGetTimerUsedUnusedCounters",
+  "lib": "libkernl.a; xmatch AC5 0x00338410 exact",
+  "words": 20
+ },
+ "0x00306530": {
+  "name": "GetTimerUsedUnusedCounters",
+  "lib": "libkernl.a; xmatch AC5 0x00338460 exact",
+  "words": 23
+ },
+ "0x00306590": {
+  "name": "iStartTimerCounter",
+  "lib": "libkernl.a; xmatch AC5 0x003384C0 near",
+  "words": 43
+ },
+ "0x00306640": {
+  "name": "StartTimerCounter",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x00338570 exact",
+  "words": 19
+ },
+ "0x00306690": {
+  "name": "iStopTimerCounter",
+  "lib": "libkernl.a; xmatch AC5 0x003385C0 near",
+  "words": 49
+ },
+ "0x00306758": {
+  "name": "StopTimerCounter",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x00338688 exact",
+  "words": 19
+ },
+ "0x003067A8": {
+  "name": "SetTimerCount",
+  "lib": "libkernl.a; xmatch AC5 0x003386D8 exact",
+  "words": 51
+ },
+ "0x00306878": {
+  "name": "iGetTimerBaseTime",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x003387A8 exact",
+  "words": 18
+ },
+ "0x003068C0": {
+  "name": "GetTimerBaseTime",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x003387F0 exact",
+  "words": 19
+ },
+ "0x00306910": {
+  "name": "iGetTimerCount",
+  "lib": "libkernl.a; xmatch AC5 0x00338840 exact",
+  "words": 27
+ },
+ "0x00306980": {
+  "name": "GetTimerCount",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x003388B0 exact",
+  "words": 19
+ },
+ "0x003069D0": {
+  "name": "iSetTimerHandler",
+  "lib": "libkernl.a; xmatch AC5 0x00338900 near",
+  "words": 61
+ },
+ "0x00306AC8": {
+  "name": "SetTimerHandler",
+  "lib": "libkernl.a; xmatch AC5 0x003389F8 exact",
+  "words": 31
+ },
+ "0x00306BF0": {
+  "name": "TimerUSec2BusClock",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x00338B20 exact",
+  "words": 28
+ },
+ "0x00306C60": {
+  "name": "TimerBusClock2Freq",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x00338B90 exact",
+  "words": 21
+ },
+ "0x00306CF0": {
+  "name": "_InitAlarm",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x00338C20 exact",
+  "words": 19
+ },
+ "0x00306D40": {
+  "name": "AlarmHandler",
+  "lib": "libtimer.a; xmatch AC5 0x00338C70 exact",
+  "words": 23
+ },
+ "0x00306DA0": {
+  "name": "SetTimerAlarm",
+  "lib": "libkernl.a; xmatch AC5 0x00338CD0 exact",
+  "words": 75
+ },
+ "0x00306ED0": {
+  "name": "iSetTimerAlarm",
+  "lib": "libkernl.a; xmatch AC5 0x00338E00 exact",
+  "words": 60
+ },
+ "0x00306FC0": {
+  "name": "ReleaseTimerAlarm",
+  "lib": "libkernl.a; xmatch AC5 0x00338EF0 exact",
+  "words": 42
+ },
+ "0x00307068": {
+  "name": "iReleaseTimerAlarm",
+  "lib": "libkernl.a; xmatch AC5 0x00338F98 exact",
+  "words": 30
+ },
+ "0x00307108": {
+  "name": "sceSifSetRebootNotifyBuffer",
+  "lib": "libkernl.a; xmatch AC5 0x00339038 exact",
+  "words": 31
+ },
+ "0x00307188": {
+  "name": "sceSifAddRebootNotifyHandler",
+  "lib": "libkernl.a; xmatch AC5 0x003390B8 exact",
+  "words": 46
+ },
+ "0x00307298": {
+  "name": "sceSifExecNotifyHandler",
+  "lib": "libkernl.a; xmatch AC5 0x003391C8 exact",
+  "words": 42
+ },
+ "0x00307340": {
+  "name": "sceDeci2Open",
+  "lib": "libkernl.a; xmatch AC5 0x003396C0 exact",
+  "words": 17
+ },
+ "0x00307388": {
+  "name": "sceDeci2Close",
+  "lib": "libkernl.a; xmatch AC5 0x00339708 exact",
+  "words": 9
+ },
+ "0x003073B0": {
+  "name": "sceDeci2ReqSend",
+  "lib": "libkernl.a; xmatch AC5 0x00339730 exact",
+  "words": 12
+ },
+ "0x003073E0": {
+  "name": "sceDeci2Poll",
+  "lib": "libkernl.a; xmatch AC5 0x00339760 exact",
+  "words": 9
+ },
+ "0x00307408": {
+  "name": "sceDeci2GrpOpen",
+  "lib": "libkernl.a; xmatch AC5 0x00339788 exact",
+  "words": 12
+ },
+ "0x00307438": {
+  "name": "sceDeci2GrpClose",
+  "lib": "libkernl.a; xmatch AC5 0x003397B8 exact",
+  "words": 9
+ },
+ "0x00307460": {
+  "name": "sceDeci2ExRecv",
+  "lib": "libkernl.a; xmatch AC5 0x003397E0 exact",
+  "words": 13
+ },
+ "0x00307498": {
+  "name": "sceDeci2ExSend",
+  "lib": "libkernl.a; xmatch AC5 0x00339818 exact",
+  "words": 13
+ },
+ "0x00307500": {
+  "name": "sceDeci2ExLock",
+  "lib": "libkernl.a; xmatch AC5 0x00339880 exact",
+  "words": 9
+ },
+ "0x00307528": {
+  "name": "sceDeci2ExUnLock",
+  "lib": "libkernl.a; xmatch AC5 0x003398A8 exact",
+  "words": 9
+ },
+ "0x00307550": {
+  "name": "kputs",
+  "lib": "libkernl.a; xmatch AC5 0x003398D0 exact",
+  "words": 9
+ },
+ "0x00307578": {
+  "name": "_set_sreg",
+  "lib": "libkernl.a; xmatch AC5 0x003398F8 exact",
+  "words": 7
+ },
+ "0x00307598": {
+  "name": "_change_addr",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x00339918 exact",
+  "words": 3
+ },
+ "0x003075A8": {
+  "name": "sceSifGetSreg",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x00339928 exact",
+  "words": 6
+ },
+ "0x003075E0": {
+  "name": "sceSifGetDataTable",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x00339960 exact",
+  "words": 3
+ },
+ "0x003075F0": {
+  "name": "sceSifInitCmd",
+  "lib": "libkernl.a; xmatch AC5 0x00339970 near",
+  "words": 160
+ },
+ "0x00307870": {
+  "name": "sceSifExitCmd",
+  "lib": "libkernl.a; xmatch AC5 0x00339BF0 exact",
+  "words": 13
+ },
+ "0x003078D8": {
+  "name": "sceSifAddCmdHandler",
+  "lib": "libkernl.a; xmatch AC5 0x00339C58 exact",
+  "words": 30
+ },
+ "0x00307950": {
+  "name": "sceSifRemoveCmdHandler",
+  "lib": "libkernl.a; xmatch AC5 0x00339CD0 exact",
+  "words": 19
+ },
+ "0x003079A0": {
+  "name": "_sceSifSendCmd",
+  "lib": "libkernl.a; xmatch AC5 0x00339D20 exact",
+  "words": 77
+ },
+ "0x00307AD8": {
+  "name": "sceSifSendCmd",
+  "lib": "libkernl.a; xmatch AC5 0x00339E58 exact",
+  "words": 15
+ },
+ "0x00307B18": {
+  "name": "isceSifSendCmd",
+  "lib": "libkernl.a; xmatch AC5 0x00339E98 exact",
+  "words": 15
+ },
+ "0x00307B58": {
+  "name": "_sceSifCmdIntrHdlr",
+  "lib": "libkernl.a; xmatch AC5 0x00339ED8 exact",
+  "words": 82
+ },
+ "0x00307CA0": {
+  "name": "sceSifWriteBackDCache",
+  "lib": "libkernl.a; xmatch AC5 0x0033A020 exact",
+  "words": 43
+ },
+ "0x00307DB0": {
+  "name": "SetDebugHandler",
+  "lib": "libkernl.a; xmatch AC5 0x0033A130 exact",
+  "words": 33
+ },
+ "0x00307E38": {
+  "name": "Copy",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x0033A1B8 exact",
+  "words": 4
+ },
+ "0x00307E48": {
+  "name": "kCopy",
+  "lib": "libkernl.a; xmatch AC5 0x0033A1C8 exact",
+  "words": 14
+ },
+ "0x00307E80": {
+  "name": "GetEntryAddress",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x0033A200 exact",
+  "words": 4
+ },
+ "0x00307E90": {
+  "name": "setup",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x0033A210 exact",
+  "words": 4
+ },
+ "0x00307EA0": {
+  "name": "InitTLBFunctions",
+  "lib": "libkernl.a; xmatch AC5 0x0033A220 exact",
+  "words": 49
+ },
+ "0x00307F88": {
+  "name": "_SetTLBEntry",
+  "lib": "libkernl.a (anchored); xmatch AC5 0x0033A308 exact",
+  "words": 4
+ },
+ "0x00307F98": {
+  "name": "SetTLBEntry",
+  "lib": "libkernl.a; xmatch AC5 0x0033A318 exact",
+  "words": 12
+ },
+ "0x00308028": {
+  "name": "InitTLB",
+  "lib": "libkernl.a; xmatch AC5 0x0033A3A8 exact",
+  "words": 16
+ },
+ "0x00308068": {
+  "name": "InitTLB32MB",
+  "lib": "libkernl.a; xmatch AC5 0x0033A3E8 exact",
+  "words": 125
+ },
+ "0x00308280": {
+  "name": "_kTLBException",
+  "lib": "libkernl.a; xmatch AC5 0x0033A600 exact",
+  "words": 64
+ },
+ "0x003083C0": {
+  "name": "_kExitTLBHandler",
+  "lib": "libkernl.a; xmatch AC5 0x0033A740 exact",
+  "words": 61
+ },
+ "0x003084C0": {
+  "name": "_kDebugException",
+  "lib": "libkernl.a; xmatch AC5 0x0033A840 exact",
+  "words": 63
+ },
+ "0x003088D8": {
+  "name": "sceDbcEnd",
+  "lib": "libdbc.a; xmatch AC5 0x0033ABF8 exact",
+  "words": 18
+ },
+ "0x00308D50": {
+  "name": "sceDbcGetConnection",
+  "lib": "libdbc.a; xmatch AC5 0x0033AF58 exact",
+  "words": 61
+ },
+ "0x00309808": {
+  "name": "DPRINT",
+  "lib": "libmtap.a; xmatch AC5 0x0033B858 exact",
+  "words": 10
+ },
+ "0x00309830": {
+  "name": "scePad2Init",
+  "lib": "libpad2.a; xmatch AC5 0x0033B880 exact",
+  "words": 16
+ },
+ "0x00309870": {
+  "name": "scePad2End",
+  "lib": "libpad2.a; xmatch AC5 0x0033B8C0 exact",
+  "words": 26
+ },
+ "0x003098D8": {
+  "name": "scePad2CreateSocket",
+  "lib": "libpad2.a; xmatch AC5 0x0033B928 exact",
+  "words": 66
+ },
+ "0x003099E0": {
+  "name": "scePad2DeleteSocket",
+  "lib": "libpad2.a; xmatch AC5 0x0033BA30 exact",
+  "words": 21
+ },
+ "0x00309A38": {
+  "name": "scePad2Read",
+  "lib": "libpad2.a (anchored); xmatch AC5 0x0033BA88 near",
+  "words": 53
+ },
+ "0x00309B10": {
+  "name": "scePad2GetButtonProfile",
+  "lib": "libpad2.a (anchored); xmatch AC5 0x0033BB60 fuzzy 0.95",
+  "words": 0
+ },
+ "0x00309BE0": {
+  "name": "scePad2GetState",
+  "lib": "libpad2.a; xmatch AC5 0x0033BC30 exact",
+  "words": 80
+ },
+ "0x00309E00": {
+  "name": "scePad2InitDmaDBuff",
+  "lib": "libpad2.a; xmatch AC5 0x0033BE50 exact",
+  "words": 30
+ },
+ "0x00309E78": {
+  "name": "scePad2LinkDriver",
+  "lib": "libpad2.a; xmatch AC5 0x0033BEC8 exact",
+  "words": 21
+ },
+ "0x00309ED0": {
+  "name": "scePad2GetSide",
+  "lib": "libpad2.a; xmatch AC5 0x0033BF20 exact",
+  "words": 25
+ },
+ "0x00309F38": {
+  "name": "scePad2GetSide2",
+  "lib": "libpad2.a; xmatch AC5 0x0033BF88 exact",
+  "words": 25
+ },
+ "0x00309FA0": {
+  "name": "scePad2CheckDma",
+  "lib": "libpad2.a; xmatch AC5 0x0033BFF0 exact",
+  "words": 23
+ },
+ "0x0030A000": {
+  "name": "scePad2SetButtonOrder",
+  "lib": "libpad2.a; xmatch AC5 0x0033C050 exact",
+  "words": 44
+ },
+ "0x0030A0E8": {
+  "name": "sceVibGetProfile",
+  "lib": "libvib.a; xmatch AC5 0x0033C138 exact",
+  "words": 32
+ },
+ "0x0030A168": {
+  "name": "sceVibSetActParam",
+  "lib": "libvib.a; xmatch AC5 0x0033C1B8 exact",
+  "words": 59
+ },
+ "0x0030A258": {
+  "name": "sceMcInit",
+  "lib": "libmc.a (aligned); xmatch AC5 0x0033C2A8 layout 0.67",
+  "words": 0
+ },
+ "0x0030A480": {
+  "name": "sceMcEnd",
+  "lib": "libmc.a (aligned); xmatch AC5 0x0033C478 layout 0.73",
+  "words": 0
+ },
+ "0x0030A4D8": {
+  "name": "sceMcChangeThreadPriority",
+  "lib": "libmc.a (anchored); xmatch AC5 0x0033C4F8 exact",
+  "words": 3
+ },
+ "0x0030A4E8": {
+  "name": "sceMcChangeThreadPriority",
+  "lib": "libmc.a (aligned); xmatch AC5 0x0033C508 fuzzy 0.87",
+  "words": 0
+ },
+ "0x0030A5A8": {
+  "name": "sceMcGetSlotMax",
+  "lib": "libmc.a (aligned); xmatch AC5 0x0033C5C8 layout 0.78",
+  "words": 0
+ },
+ "0x0030A668": {
+  "name": "sceMcOpen",
+  "lib": "libmc.a (aligned); xmatch AC5 0x0033C690 callgraph 0.86",
+  "words": 0
+ },
+ "0x0030A790": {
+  "name": "sceMcMkdir",
+  "lib": "libmc.a; xmatch AC5 0x0033C7B8 exact",
+  "words": 13
+ },
+ "0x0030A7C8": {
+  "name": "sceMcClose",
+  "lib": "libmc.a (aligned); xmatch AC5 0x0033C7F0 layout 0.85",
+  "words": 0
+ },
+ "0x0030A888": {
+  "name": "sceMcSeek",
+  "lib": "libmc.a (aligned); xmatch AC5 0x0033C8B0 fuzzy 0.88",
+  "words": 0
+ },
+ "0x0030A968": {
+  "name": "mceIntrReadFixAlign",
+  "lib": "libmc.a (aligned); xmatch AC5 0x0033C990 layout 0.46",
+  "words": 0
+ },
+ "0x0030AA18": {
+  "name": "sceMcRead",
+  "lib": "libmc.a (anchored); xmatch AC5 0x0033CA28 fuzzy 0.86",
+  "words": 0
+ },
+ "0x0030AB30": {
+  "name": "sceMcWrite",
+  "lib": "libmc.a (anchored); xmatch AC5 0x0033CB40 fuzzy 0.93",
+  "words": 0
+ },
+ "0x0030ACA8": {
+  "name": "sceMcSync",
+  "lib": "libmc.a; xmatch AC5 0x0033CCB8 exact",
+  "words": 49
+ },
+ "0x0030AD70": {
+  "name": "mceGetInfoApdx",
+  "lib": "libmc.a; xmatch AC5 0x0033CD80 exact",
+  "words": 22
+ },
+ "0x0030ADC8": {
+  "name": "sceMcGetInfo",
+  "lib": "libmc.a (anchored); xmatch AC5 0x0033CDD8 fuzzy 0.93",
+  "words": 0
+ },
+ "0x0030AF48": {
+  "name": "sceMcUdCheckNewCard",
+  "lib": "libmc.a (anchored); xmatch AC5 0x0033CF58 near",
+  "words": 28
+ },
+ "0x0030AFB8": {
+  "name": "sceMcGetDir",
+  "lib": "libmc.a (anchored); xmatch AC5 0x0033CFC8 fuzzy 0.81",
+  "words": 0
+ },
+ "0x0030B108": {
+  "name": "mceStorePwd",
+  "lib": "libmc.a; xmatch AC5 0x0033D118 exact",
+  "words": 35
+ },
+ "0x0030B198": {
+  "name": "sceMcChdir",
+  "lib": "libmc.a (anchored); xmatch AC5 0x0033D1A8 layout 0.75",
+  "words": 0
+ },
+ "0x0030B2D8": {
+  "name": "sceMcFormat",
+  "lib": "libmc.a (anchored); xmatch AC5 0x0033D2E8 layout 0.88",
+  "words": 0
+ },
+ "0x0030B3A8": {
+  "name": "sceMcDelete",
+  "lib": "libmc.a (anchored); xmatch AC5 0x0033D3B8 fuzzy 0.86",
+  "words": 0
+ },
+ "0x0030B4C8": {
+  "name": "sceMcFlush",
+  "lib": "libmc.a (anchored); xmatch AC5 0x0033D4D8 layout 0.85",
+  "words": 0
+ },
+ "0x0030B588": {
+  "name": "sceMcSetFileInfo",
+  "lib": "libmc.a (anchored); xmatch AC5 0x0033D598 fuzzy 0.90",
+  "words": 0
+ },
+ "0x0030B758": {
+  "name": "sceMcRename",
+  "lib": "libmc.a (anchored); xmatch AC5 0x0033D768 fuzzy 0.89",
+  "words": 0
+ },
+ "0x0030B8B0": {
+  "name": "sceMcUnformat",
+  "lib": "libmc.a (aligned); xmatch AC5 0x0033D8C8 layout 0.88",
+  "words": 0
+ },
+ "0x0030B980": {
+  "name": "sceMcGetEntSpace",
+  "lib": "libmc.a (aligned); xmatch AC5 0x0033D998 layout 0.73",
+  "words": 0
+ },
+ "0x0030BA90": {
+  "name": "sceCdCallback",
+  "lib": "libcdvd.a; xmatch AC5 0x0033DAA8 exact",
+  "words": 26
+ },
+ "0x0030BAF8": {
+  "name": "_sceCd_cd_callback",
+  "lib": "libcdvd.a; xmatch AC5 0x0033DB10 exact",
+  "words": 40
+ },
+ "0x0030BB98": {
+  "name": "_sceCd_cbLoop",
+  "lib": "libcdvd.a; xmatch AC5 0x0033DBB0 exact",
+  "words": 52
+ },
+ "0x0030BC68": {
+  "name": "sceCdInitEeCB",
+  "lib": "libcdvd.a (anchored); xmatch AC5 0x0033DC80 layout 0.33",
+  "words": 0
+ },
+ "0x0030BD08": {
+  "name": "_sceCd_cd_read_intr",
+  "lib": "libcdvd.a; xmatch AC5 0x0033DD50 exact",
+  "words": 46
+ },
+ "0x0030BDC0": {
+  "name": "cmd_sem_init",
+  "lib": "libcdvd.a (aligned); xmatch AC5 0x0033DE08 callgraph 0.76",
+  "words": 0
+ },
+ "0x0030BEA8": {
+  "name": "cdvd_exit",
+  "lib": "libcdvd.a; xmatch AC5 0x0033DEC0 exact",
+  "words": 40
+ },
+ "0x0030BF48": {
+  "name": "sceCdPOffCallback",
+  "lib": "libcdvd.a; xmatch AC5 0x0033DF60 exact",
+  "words": 32
+ },
+ "0x0030BFC8": {
+  "name": "_sceCd_Poff_Intr",
+  "lib": "libcdvd.a; xmatch AC5 0x0033DFE0 exact",
+  "words": 21
+ },
+ "0x0030C020": {
+  "name": "PowerOffCB",
+  "lib": "libcdvd.a; xmatch AC5 0x0033E038 exact",
+  "words": 30
+ },
+ "0x0030C098": {
+  "name": "sceCdLayerSearchFile",
+  "lib": "libcdvd.a (anchored); xmatch AC5 0x0033E0B0 callgraph 0.97",
+  "words": 0
+ },
+ "0x0030C398": {
+  "name": "sceCdSearchFile",
+  "lib": "libcdvd.a (aligned); xmatch AC5 0x0033E3C8 exact",
+  "words": 7
+ },
+ "0x0030C3B8": {
+  "name": "_sceCd_ncmd_prechk",
+  "lib": "libcdvd.a (aligned); xmatch AC5 0x0033E3E8 callgraph 0.94",
+  "words": 0
+ },
+ "0x0030C510": {
+  "name": "sceCdNcmdDiskReady",
+  "lib": "libcdvd.a; xmatch AC5 0x0033E558 near",
+  "words": 38
+ },
+ "0x0030C5A8": {
+  "name": "sceCdSync",
+  "lib": "libcdvd.a; xmatch AC5 0x0033E5F0 exact",
+  "words": 40
+ },
+ "0x0030C648": {
+  "name": "sceCdSyncS",
+  "lib": "libcdvd.a; xmatch AC5 0x0033E690 exact",
+  "words": 27
+ },
+ "0x0030C6B8": {
+  "name": "_sceCd_scmd_prechk",
+  "lib": "libcdvd.a (aligned); xmatch AC5 0x0033E700 callgraph 0.94",
+  "words": 0
+ },
+ "0x0030C8C0": {
+  "name": "sceCdInit",
+  "lib": "libcdvd.a (verified retail call graph; CODE_REVIEW_2026-09-13 H2); xmatch AC5 0x0033E920 fuzzy 0.85",
+  "words": 0
+ },
+ "0x0030CBA8": {
+  "name": "sceCdDiskReady_old",
+  "lib": "libcdvd.a (verified retail call graph; CODE_REVIEW_2026-09-13 H2); xmatch AC5 0x0033EC00 fuzzy 0.97",
+  "words": 0
+ },
+ "0x0030CDC0": {
+  "name": "sceCdDiskReady",
+  "lib": "libcdvd.a (verified retail call graph; CODE_REVIEW_2026-09-13 H2); xmatch AC5 0x0033EDF8 fuzzy 0.97",
+  "words": 0
+ },
+ "0x0030CFE0": {
+  "name": "sceCdMmode",
+  "lib": "libcdvd.a; xmatch AC5 0x0033F938 near",
+  "words": 52
+ },
+ "0x0030DE10": {
+  "name": "sceMpegInit",
+  "lib": "libmpeg.a; xmatch AC5 0x0033FA08 exact",
+  "words": 44
+ },
+ "0x0030DEC8": {
+  "name": "sceMpegAddBs",
+  "lib": "libmpeg.a; xmatch AC5 0x0033FCD0 exact",
+  "words": 15
+ },
+ "0x0030E388": {
+  "name": "_rix_011",
+  "lib": "libmpeg.a (aligned); xmatch AC5 0x00345460 fuzzy 0.82",
+  "words": 0
+ },
+ "0x0030E490": {
+  "name": "_sceMpegAlalcAlloc",
+  "lib": "libmpeg.a; xmatch AC5 0x003400C8 exact",
+  "words": 27
+ },
+ "0x0030E500": {
+  "name": "_sceMpegAlalcReset",
+  "lib": "libmpeg.a; xmatch AC5 0x0031CEE8 exact",
+  "words": 6
+ },
+ "0x0030E568": {
+  "name": "_rix_101",
+  "lib": "libmpeg.a (aligned); xmatch AC5 0x00345918 near",
+  "words": 164
+ },
+ "0x0030F6C0": {
+  "name": "_ch3dmaCSC",
+  "lib": "libmpeg.a; xmatch AC5 0x00346330 exact",
+  "words": 82
+ },
+ "0x0030F808": {
+  "name": "_ch4dma",
+  "lib": "libmpeg.a; xmatch AC5 0x00346638 exact",
+  "words": 53
+ },
+ "0x0030FAF0": {
+  "name": "_dualPrimeVector",
+  "lib": "libmpeg.a (aligned); xmatch AC5 0x003431D8 near",
+  "words": 97
+ },
+ "0x00311610": {
+  "name": "_motionVectors",
+  "lib": "libmpeg.a; xmatch AC5 0x00343EA8 exact",
+  "words": 103
+ },
+ "0x003123B8": {
+  "name": "_sceMpegPictureData0",
+  "lib": "libmpeg.a (aligned); xmatch AC5 0x003438B8 fuzzy 0.83",
+  "words": 0
+ },
+ "0x00313CA0": {
+  "name": "_rix_001",
+  "lib": "libmpeg.a (aligned); xmatch AC5 0x00345170 fuzzy 0.85",
+  "words": 0
+ },
+ "0x003140D0": {
+  "name": "_rix_000",
+  "lib": "libmpeg.a (aligned); xmatch AC5 0x00344EC0 fuzzy 0.80",
+  "words": 0
+ },
+ "0x003142D8": {
+  "name": "dmaRefImage",
+  "lib": "libmpeg.a (aligned); xmatch AC5 0x00344D98 callgraph 0.60",
+  "words": 0
+ },
+ "0x00314728": {
+  "name": "_ri0_010",
+  "lib": "libmpeg.a (aligned); xmatch AC5 0x003453D0 fuzzy 0.93",
+  "words": 0
+ },
+ "0x003147C0": {
+  "name": "_rix_010",
+  "lib": "libmpeg.a (aligned); xmatch AC5 0x003452D8 fuzzy 0.89",
+  "words": 0
+ },
+ "0x003148B8": {
+  "name": "setD3_CHCR",
+  "lib": "libipu.a; xmatch AC5 0x00346998 exact",
+  "words": 29
+ },
+ "0x00314930": {
+  "name": "setD4_CHCR",
+  "lib": "libipu.a; xmatch AC5 0x00346A10 exact",
+  "words": 29
+ },
+ "0x003149A8": {
+  "name": "sceIpuStopDMA",
+  "lib": "libipu.a; xmatch AC5 0x00346A88 exact",
+  "words": 57
+ },
+ "0x00314A90": {
+  "name": "sceIpuRestartDMA",
+  "lib": "libipu.a; xmatch AC5 0x00346B70 exact",
+  "words": 84
+ },
+ "0x00314C48": {
+  "name": "setD4_CHCR",
+  "lib": "libipu.a; xmatch AC5 0x00346D28 exact",
+  "words": 29
+ },
+ "0x00314CC0": {
+  "name": "sceIpuInit",
+  "lib": "libipu.a; xmatch AC5 0x00346DA0 exact",
+  "words": 142
+ }
+}

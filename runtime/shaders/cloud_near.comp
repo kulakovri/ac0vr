@@ -1,0 +1,443 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+#extension GL_EXT_control_flow_attributes : require
+/* cloud_near.comp (S3, agent C): the near cloud volume, per eye (layer = eye), at half the target per axis (C3).
+   Marches the shared C4 density (cl_density) from r0 (4 m: never inside the canopy) to the nearest of the near range
+   (cl.cfg.z, where the far map's march starts), the scene distance and the cloud band.
+
+   No temporal reuse, no screen-space jitter (per-eye history and per-pixel noise are what flicker and differ between
+   the eyes in every shipped VR flight sim). The samples are WORLD-FIXED instead: they sit where the ray crosses planes
+   perpendicular to its dominant world axis (structured volume sampling, Bowles & Zimmermann 2015), anchored in the
+   cloud frame (x/z modulo 4000 m, y = altitude). Both eyes and consecutive frames (in-between frames too) sample the
+   same world points, so the image changes only by true parallax.
+   - Steps grow with distance in tiers: plane spacing s0 up to D0, 2 s0 up to D0 q, 4 s0 up to D0 q^2, ... Each tier end
+     is a node of its own (a camera-relative sample) and the coarse planes are a subset of the fine ones, so the node
+     set changes only by planes passing through camera-relative nodes, where the trapezoid segments shrink to zero: the
+     result is continuous in the camera position. Every spacing s0 2^i used must divide 4000 m (ps2_clouds_near.c
+     snaps s0 so that s0 * 32 does).
+   - Trapezoid integration with exact partial lengths at r0, the scene distance, the band and the range.
+   - Where two world axes tie, both plane families are marched and blended (flag 1), else a faint world-fixed seam.
+   - A high-frequency detail octave (the detail Worley at a short period) erodes the density near the camera only
+     (inside a cloud the near field is otherwise smooth grey) and is gone before the hand-over.
+   - Shading: the shared C4 model cl_shade (cloud_common.glsl: S5's measured tone, the DARK copy where there is cloud
+     above -- cl_above_probe on every 4th world-fixed plane and every tier node, held in between (the field is a
+     quarter band thickness above, base noise only: smooth; the colour at the hand-over is the far map's) --, the LIGHT
+     copy, thin rims, dense cores, the cast shadow of the cloud shadow map from the probe point on -- cl_cast_t, held
+     with the probe --, the game's haze) and the shared
+     extinction cl_extinction(), so colour and opacity at the hand-over equal the far map's. Near-only extras, gone by
+     0.9 x range: samples deep inside a cloud blob (C4's blob envelope e = coverage x vertical profile: 1 at the core,
+     0 at the surface) are pulled toward C1 incloud -- inside a cloud the light is diffuse and the game's veil is mid
+     blue-grey, never white -- and get lumps from their density RELATIVE to the local mean (a moving mean along the
+     ray over ~250 m, weighted by segment length, so it is continuous in the camera position and independent of the
+     per-cloud density scale): thinner toward LIGHT, denser toward DARK, so a uniformly dense core converges to incloud
+     (S5/E measured the game's veil at a p5-p95 spread of 20-28 levels on 16 px blocks, also the comfort cap). Cloud
+     surfaces keep the shared look, whether the camera is inside a cloud or passing one. Also optional: an extinction
+     multiplier, a light sample with Hillaire's three-octave multiple scattering (flag 2).
+   Cost modes (no temporal reuse in either):
+   - checkerboard (flag 8): pass A (flag 8) marches the texels with (x + y) even; pass B (flags 8 | 16) gives each odd
+     texel the mean of its four marched neighbours where they agree with it in clip distance and with each other in
+     transmittance and colour (smooth fog: the error is far below a level), and marches it for real anywhere else
+     (cloud edges, silhouettes, depth edges, the crop border). A fixed spatial pattern: nothing changes over time.
+   - prefiltered far tiers (flag 32): from the fourth tier on (~350 m) the noise is read at the mip level of the step
+     (C4 cl_density_ws, as the far map does at the hand-over).
+   - coarse periphery (ACZ_VR_CLOUD_NEAR_FOV_DEG, flag 64, ov_passes 2026-10-25; pc.i1.w = tan^2 of the angle, float
+     bits): beyond that angle from the eye's axis (the layer's projection centre) every distance tier is marched at twice
+     its plane spacing -- the same tier nodes, every plane still a world-fixed one (a subset of the fine set: s0 x 64
+     divides 4000 m with the default s0), so the samples stay anchored and nothing moves with time --, blended with the
+     fine march over NEAR_FOV_BAND_DEG past the angle. The planar image has 1.7x (40 deg) to 2.4x (50 deg) the centre's
+     pixels per degree along the radius out there.
+   - lens mask (flag 128, PS2_PASS_MASK with the runtime's XR_KHR_visibility_mask or a test lens): blocks of 8 x 8
+     texels the headset's lens never shows are skipped like the outside of the crop (set 1 binding 1, per frame slot).
+   In-between frames' reuse (ACZ_VR_CLOUD_NEAR_REUSE, nx_cloudreuse 2026-10-25; ps2_clouds_near.c): flag 256 (game
+   frames) also keeps the march's part beyond the first tier node (pc.f0.z, 60 m: a camera-relative sample, so the split
+   is exact; the near part (L_n, T_n) is taken when the march passes it) as the history: cl_near_far_img = ((L - L_n) /
+   T_n, T / T_n), cl_near_par_img = (the contribution-weighted mean of 1 / distance over that part's segments, its
+   weighted standard deviation (1 / clip where nothing was integrated there), the clip distance, 0); a texel the
+   checkerboard filled gets its four marched neighbours' mean (marking it instead and taking the mean in
+   cloud_near_reuse.comp saved the game frame ~0.015 ms but cost the in-between frame 0.04-0.06); flag 512 (in-between
+   frames, after cloud_near_reuse.comp wrote the reprojected far part into cl_near_img and flagged blocks in set 1
+   binding 2): the flagged blocks are marched in full, every other texel only up to the tier node and put in front of its
+   reprojected far part (L_n + T_n x far); flag 1024 tints those green (ACZ_VR_CLOUD_NEAR_REUSE_VIEW).
+   Output: cl_near_img = (premultiplied rgb, transmittance); cl_near_depth_img = the ray distance the texel's march was
+   clipped at, min(nearest scene distance of its 2x2 target pixels, range) -- the composite's nearest-depth key.
+   Pipelines (perf6_clouds 2026-11-03; ps2_clouds_near.c near_pipe_get): constants 1-4 below. With their defaults every
+   statement is the one above (the generic pipeline, the flags read from the push constants). */
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+/* the coarse periphery's pipeline (ps2_clouds_near.c makes it with 1 only when ACZ_VR_CLOUD_NEAR_FOV_DEG is set); with 0
+   the driver drops its code and the march is the one before (one call site, no loop) */
+layout(constant_id = 0) const int NEAR_COARSE = 0;
+/* NEAR_SPEC (ACZ_VR_CLOUD_NEAR_SPEC; bits): 1 = the flags are the pipeline's constants -- flags = (pc.i0.y & NEAR_SPEC_DYN)
+   | NEAR_SPEC_FIX, one pipeline per pass kind (pass A, pass B's fill, the reuse's game / in-between frames): the compiler
+   drops the code a pass never runs (fq_opt 2026-10-26 measured 72 -> 64 registers, 128 B of local memory -> 0) -- and the
+   fill's four neighbours in an unrolled loop (the same reads and tests, in the same order). [measurement,
+   ACZ_VR_CLOUD_DETAIL_AB's lever spec=N] 8 = constant colour (the shading's arithmetic
+   gone, the probe's reads kept), 16 = constant colour without the probe's reads, 32 = the base and detail noise read
+   twice (a second read at an offset point, never used) -- whether the march is bound by arithmetic or by its reads */
+layout(constant_id = 1) const int NEAR_SPEC = 0;
+layout(constant_id = 2) const int NEAR_SPEC_FIX = 0;
+layout(constant_id = 3) const int NEAR_SPEC_DYN = -1;
+/* NEAR_DIV (ACZ_VR_CLOUD_DETAIL, the CLOUD DETAIL rungs): a near texel covers NEAR_DIV x NEAR_DIV target pixels (2 = half
+   resolution per axis, as before; 3 or 4 on the lower rungs) */
+layout(constant_id = 4) const int NEAR_DIV = 2;
+#define CL_STORAGE
+#include "cloud_common.glsl"
+/* i0: x first eye layer, y flags (1 axis blend, 2 light sample, 4 debug: opacity as grey, 8 checkerboard, 16 its fill
+       pass, 32 prefiltered far tiers, 64 the coarse periphery, 128 the lens mask is valid), z sample cap,
+       w the frame-in-flight slot of the in-cloud probe (set 1)
+   i1: x lump moving-mean window (m), y lump scale, z near_contrast override (float bits; 0 = NEAR_MEAN_M /
+       NEAR_LUMP_SCALE / near_art.y), w the coarse periphery's tan^2 (float bits); the part of each
+       eye the headset shows comes from C2: cl.vis[eye], target pixels
+   f0: r0 (m), s0 (m), D0 (m), q          f1: x extinction override (1/m at density 1; 0 = cl_extinction()),
+                                              near detail strength, period (m), fade end (m) */
+layout(push_constant) uniform PC { ivec4 i0; ivec4 i1; vec4 f0; vec4 f1; } pc;
+/* set 1 (ps2_clouds_near.c): the in-cloud probe, one vec4 per frame-in-flight slot, read by the CPU when the slot
+   comes round again: x = mean opacity of six 120 m rays from the centre eye along the world axes (our rendered veil
+   around the aircraft) -> ps2_clouds_report_in_cloud (canopy mist, airflow, rumble) */
+layout(set = 1, binding = 0, std430) buffer NearProbe { vec4 slot[]; } probe;
+/* set 1 binding 1 (ov_passes, PS2_PASS_MASK): the lens' hidden area per frame slot (pc.i0.w): per eye a bit per block
+   of 8 x 8 texels that the headset's lens never shows (ps2_video.c ps2_vk_pm_lens_blocks; flag 128 = valid) */
+layout(set = 1, binding = 1, std430) readonly buffer NearLens { uint bits[]; } lens;
+#define NEAR_LENS_UINTS 2048
+/* ACZ_VR_CLOUD_NEAR_REUSE: the history (common set bindings 19 / 20, ps2_clouds.h CL_B_NEAR_FAR_IMG / _PAR_IMG) and the
+   full-march flags of cloud_near_reuse.comp (set 1 binding 2: one uint per 8 x 8-texel block and eye layer) */
+layout(set = 0, binding = 19, rgba16f) uniform image2DArray cl_near_far_img;
+layout(set = 0, binding = 20, rgba16f) uniform image2DArray cl_near_par_img;
+layout(set = 1, binding = 2, std430) readonly buffer NearFlags { uint f[]; } flags;
+/* the pass's flags (pc.i0.y): from the push constants, or the pipeline's constants (NEAR_SPEC bit 1) */
+int nfl() { return (NEAR_SPEC & 1) != 0 ? ((pc.i0.y & NEAR_SPEC_DYN) | NEAR_SPEC_FIX) : pc.i0.y; }
+/* the target pixel position of near texel q's centre (the ray of its march) */
+vec2 near_centre(ivec2 q) { return NEAR_DIV == 2 ? vec2(q * 2) + 1.0 : vec2(q * NEAR_DIV) + 0.5 * float(NEAR_DIV); }
+float g_w, g_iw, g_iw2;     /* flag 256: beyond the tier node, the contribution weights, x 1 / distance, x 1 / distance^2 */
+vec3 g_ln; float g_tn; bool g_rec;   /* flag 256: the march up to the tier node (g_rec: it got there) */
+
+#define NEAR_T_EXIT 0.03        /* early exit: below 3 % transmittance the rest is invisible */
+#define NEAR_LIGHT_DIST 40.0    /* light sample distance towards the sun (m) */
+#ifndef NEAR_PROBE_EVERY
+#define NEAR_PROBE_EVERY 4.0    /* the above probe on every 4th world-fixed plane of each tier (+ every tier node), held
+                                   between: the probe field is very smooth (a quarter band above, base noise only) */
+#endif
+#ifndef NEAR_FILL_TOL
+#define NEAR_FILL_TOL 0.03      /* checkerboard fill: the largest spread of the 4 neighbours (rgb, T) that may be averaged */
+#endif
+#ifndef NEAR_MEAN_M
+#define NEAR_MEAN_M 250.0       /* lumps: the moving-mean window (m); C4's billows (125-500 m) stay lumps */
+#endif
+#ifndef NEAR_FOV_BAND_DEG
+#define NEAR_FOV_BAND_DEG 2.0   /* coarse periphery: the blend band past the angle (degrees) */
+#endif
+#ifndef NEAR_LUMP_SCALE
+#define NEAR_LUMP_SCALE 0.35    /* lumps: the density ratio to the mean that counts as a full lump */
+#endif
+
+/* near-only art: cl.user[2] = C1 near_art (S5 per mission; all 0 = the defaults (0.8, 0.5, 1, 0.6)):
+   x incloud_mix (pull of blob interiors toward C1 incloud), y near_contrast (lumps from density around it),
+   z near extinction multiplier (faded to 1 by 0.9 x range), w light-sample weight (flag 2 only) */
+vec4 near_params() {
+    vec4 u = cl.user[2];
+    return any(notEqual(u, vec4(0.0))) ? u : vec4(0.8, 0.5, 1.0, 0.6);
+}
+float near_fade(float t) { return 1.0 - smoothstep(0.3 * cl.cfg.z, 0.9 * cl.cfg.z, t); }   /* 1 near .. 0 by 0.9 range */
+
+float near_detail(vec3 p, float t) {
+    float fade = 1.0 - smoothstep(0.5 * pc.f1.w, pc.f1.w, t);
+    if (fade <= 0.0 || pc.f1.y <= 0.0) return 1.0;
+    vec4 d = textureLod(cl_noise_detail, cl_world4k(p) / pc.f1.z, 0.0);
+    float hf = clamp(cl_remap(d.r * 0.6 + d.g * 0.3 + d.b * 0.1, 0.30, 0.65, 0.0, 1.0), 0.0, 1.0);
+    return mix(1.0, hf, pc.f1.y * fade);
+}
+
+/* extinction per unit density at ray distance t: the shared one, times the near-only multiplier faded out */
+float near_sigma(float t) {
+    float base = pc.f1.x > 0.0 ? pc.f1.x : cl_extinction();
+    return base * mix(1.0, near_params().z, near_fade(t));
+}
+
+/* one density (already times the extinction) + colour sample at ray distance t. ab: the shared "cloud above" probe
+   (cl_above_probe), evaluated when probe is true (every NEAR_PROBE_EVERY-th world-fixed plane and every tier node:
+   the probe field is smooth -- density a quarter band above, no detail -- and holding it over a few planes keeps it
+   world-anchored), else the last value is reused */
+void sample_at(vec3 p, vec3 rd, float t, bool probe, inout float ab, inout float cst, inout float dm, float seg, float stepm,
+               out float d, out vec3 s) {
+    vec4 wx = cl_weather(p);
+    d = cl_density_ws(p, wx, true, stepm);
+    if ((NEAR_SPEC & 32) != 0) {                       /* [measurement] the noise read twice (the second never used) */
+        vec3 p2 = p + vec3(37.0, 11.0, 23.0);
+        if (cl_noise_base_ws(p2, stepm).r + cl_noise_detail_ws(p2, stepm).r < -1.0) d += 1.0;   /* (UNORM: never) */
+    }
+    s = vec3(0.0);
+    float win = pc.i1.x != 0 ? intBitsToFloat(pc.i1.x) : NEAR_MEAN_M;
+    float a = 1.0 - exp(-seg / win);                          /* the local mean: moving mean along the ray */
+    if (d <= 0.0) { if (probe) ab = -1.0; dm = dm < 0.0 ? dm : dm * (1.0 - a); return; }   /* stale probe past gaps */
+    d *= near_detail(p, t);
+    dm = dm < 0.0 ? d : mix(dm, d, a);
+    vec4 np = near_params();
+    if (pc.i1.z != 0) np.y = intBitsToFloat(pc.i1.z);
+    float hl = cl_local_h(p, wx);
+    /* depth inside the blob: C4's envelope (the same profile rule as cl_density_ws: a listed cloud's own blob with
+       soft ends, else the C1 type profile of the procedural band) */
+    float e = wx.r * (cl.fogr.z > 0.5 ? smoothstep(0.0, 0.12, hl) * (1.0 - smoothstep(0.75, 1.0, hl))
+                                      : cl_profile(hl, cl.band.w));
+    float w = smoothstep(0.15, 0.6, e) * near_fade(t);                              /* near-only: blob interiors */
+    /* deep interiors keep the held probe value (the in-cloud pull below overrides most of the shared colour there) */
+    if ((NEAR_SPEC & 16) == 0 && ((probe && w < 0.9) || ab < 0.0)) { ab = cl_above_probe(p, 0.0); cst = cl_cast_t(cl_probe_pos(p)); }
+    if ((NEAR_SPEC & 24) != 0) {                       /* [measurement] constant colour (bit 8: the probe's reads kept) */
+        s = vec3(0.5, 0.52, 0.55);
+        if (ab + cst < -10.0) s.g = 0.0;              /* (never: keeps the probe's reads) */
+        d *= near_sigma(t);
+        return;
+    }
+    vec3 col = cl_shade_s(p, rd, d, hl, ab, cst);         /* the shared C4 colour (+ the cast shadow, held with the probe) */
+    if (w > 0.0) {
+        col = mix(col, cl.incloud.rgb, np.x * w);                                   /* the game's veil colour */
+        float ls = pc.i1.y != 0 ? intBitsToFloat(pc.i1.y) : NEAR_LUMP_SCALE;
+        float l = clamp((d / max(dm, 1.0e-4) - 1.0) / ls, -1.0, 1.0);              /* lumps: relative to the mean */
+        col = mix(col, cl.lit.rgb, np.y * w * max(-l, 0.0));
+        col = mix(col, cl.shadow.rgb, 0.6 * np.y * w * max(l, 0.0));   /* less: denser samples weigh more in the pixel */
+    }
+    if ((nfl() & 2) != 0) {                         /* one sample towards the sun, three-octave multiple scattering */
+        float od = cl_density(p + cl.sun.xyz * NEAR_LIGHT_DIST, false) * near_sigma(t) * NEAR_LIGHT_DIST;
+        float k = np.w * (1.0 - (exp(-od) + 0.5 * exp(-0.5 * od) + 0.25 * exp(-0.25 * od)) * (1.0 / 1.75));
+        col = mix(col, cl.shadow.rgb, clamp(k, 0.0, 1.0));
+    }
+    if (cl_flash_n() > 0.5) col += cl_flash_light(p, d);  /* flashes (wish #83): in-scattered with the density */
+    s = col;
+    d *= near_sigma(t);
+}
+
+/* trapezoid step from (d0, s0) to (d1, s1) over len metres (d = density x extinction, 1/m), starting at distance t0 */
+void integrate(float d0, vec3 s0, float d1, vec3 s1, float len, float t0, inout vec3 L, inout float T) {
+    float od = 0.5 * (d0 + d1) * len;
+    if (od <= 0.0) return;
+    float a = 1.0 - exp(-od);
+    if ((nfl() & 256) != 0 && t0 >= 0.999 * pc.f0.z) {       /* the far part's depth (ACZ_VR_CLOUD_NEAR_REUSE) */
+        float w = T * a, iv = 1.0 / (t0 + 0.5 * len);
+        g_w += w; g_iw += w * iv; g_iw2 += w * iv * iv;
+    }
+    L += T * a * (d0 * s0 + d1 * s1) / max(d0 + d1, 1.0e-6);   /* density-weighted colour of the segment */
+    T *= 1.0 - a;
+}
+
+/* anchored coordinate of cloud-space point p along world axis k (x/z modulo 4000 m, y altitude) */
+float plane_coord(vec3 p, int k) { return k == 0 ? cl.origin_4k.x + p.x : k == 1 ? cl.origin.y + p.y : cl.origin_4k.y + p.z; }
+
+/* world-plane march along axis k over [ta, tb], in distance tiers (see the header); coarse: every tier at twice its
+   spacing (the coarse periphery) */
+void march_planes(int k, vec3 ro, vec3 rd, float ta, float tb, int nmax, bool coarse, out vec3 L, out float T) {
+    L = vec3(0.0); T = 1.0;
+    float rk = rd[k], sg = rk > 0.0 ? 1.0 : -1.0;
+    float ok = plane_coord(ro, k);
+    float dp; vec3 cp;
+    float abv = -1.0, cst = 1.0, dm = -1.0;
+    sample_at(ro + rd * ta, rd, ta, true, abv, cst, dm, 0.0, 0.0, dp, cp);
+    float tp = ta;
+    int ns = 1;
+    float s = coarse ? 2.0 * pc.f0.y : pc.f0.y, tend = pc.f0.z;
+    for (int tier = 0; tier < 8 && tp < tb; tier++) {
+        float te = tier == 7 ? tb : min(tend, tb);            /* this tier's far node */
+        if (te > tp) {
+            float stepm = (nfl() & 32) != 0 && tier >= 3 ? s / abs(rk) : 0.0;    /* prefiltered far tiers */
+            float c = (ok + rk * tp) / s;
+            float m = sg > 0.0 ? floor(c) + 1.0 : ceil(c) - 1.0;   /* first plane of spacing s after tp */
+            for (int i = 0; i < 160; i++) {
+                float t = (m * s - ok) / rk;
+                if (t >= te) break;
+                if (ns >= nmax - 1) { te = tb; break; }       /* safety cap: close at tb */
+                float d1; vec3 c1;
+                sample_at(ro + rd * t, rd, t, mod(m, NEAR_PROBE_EVERY) == 0.0, abv, cst, dm, t - tp, stepm, d1, c1); ns++;
+                integrate(dp, cp, d1, c1, t - tp, tp, L, T);
+                if (T < NEAR_T_EXIT) return;
+                dp = d1; cp = c1; tp = t; m += sg;
+            }
+            float d1; vec3 c1;
+            sample_at(ro + rd * te, rd, te, true, abv, cst, dm, te - tp, stepm, d1, c1); ns++;
+            integrate(dp, cp, d1, c1, te - tp, tp, L, T);
+            if (T < NEAR_T_EXIT) return;
+            dp = d1; cp = c1; tp = te;
+        }
+        if (tier == 0 && (nfl() & 256) != 0) { g_ln = L; g_tn = T; g_rec = true; }   /* the near part (reuse) */
+        s *= 2.0; tend *= pc.f0.w;
+    }
+}
+
+/* the in-cloud probe (one thread per dispatch): mean opacity of six 120 m rays from the centre eye */
+void in_cloud_probe() {
+    float sum = 0.0;
+    for (int k = 0; k < 6; k++) {
+        vec3 dir = vec3(0.0); dir[k >> 1] = (k & 1) != 0 ? 1.0 : -1.0;
+        float od = 0.0;
+        for (int i = 0; i < 8; i++) {
+            vec3 p = dir * (7.5 + 15.0 * float(i));
+            od += cl_density(p, false) * near_sigma(7.5 + 15.0 * float(i)) * 15.0;
+        }
+        sum += 1.0 - exp(-od);
+    }
+    probe.slot[pc.i0.w] = vec4(sum / 6.0, 0.0, 0.0, 1.0);
+}
+
+/* nearest scene distance of texel q's 2x2 target block (NEAR_DIV x NEAR_DIV), clipped at the range */
+float texel_clip(ivec2 q, int eye) {
+    ivec2 px = q * NEAR_DIV, lim = ivec2(cl.sizes.w, cl.sizes2.x) - 1;
+    float sd = CL_INF;
+    if (NEAR_DIV == 2)
+        for (int k = 0; k < 4; k++) sd = min(sd, cl_scene_dist_m(min(px + ivec2(k & 1, k >> 1), lim), eye));
+    else
+        for (int k = 0; k < NEAR_DIV * NEAR_DIV; k++)
+            sd = min(sd, cl_scene_dist_m(min(px + ivec2(k % NEAR_DIV, k / NEAR_DIV), lim), eye));
+    return min(sd, cl.cfg.z);
+}
+
+/* the full march of texel q (block-centre ray, clipped at clip), fine or coarse */
+vec4 march_texel_c(ivec2 q, int eye, float clip, bool coarse) {
+    vec3 rd = cl_world_dir(near_centre(q));                  /* the block centre */
+    vec3 ro = cl_eye(eye);
+    float ta = pc.f0.x, tb = clip;
+    vec3 L = vec3(0.0);
+    float T = 1.0;
+    /* the cloud band (density is 0 outside [base, top] of altitude) */
+    float alt = cl_alt(ro);
+    if (abs(rd.y) < 1.0e-6) { if (alt <= cl.band.x || alt >= cl.band.y) tb = ta; }
+    else {
+        float tl = (cl.band.x - alt) / rd.y, th = (cl.band.y - alt) / rd.y;
+        ta = max(ta, min(tl, th)); tb = min(tb, max(tl, th));
+    }
+    if (tb > ta) {
+        int nmax = pc.i0.z;
+        vec3 a = abs(rd);
+        int k1 = a.x >= a.y && a.x >= a.z ? 0 : (a.y >= a.z ? 1 : 2);
+        int k2 = k1 == 0 ? (a.y >= a.z ? 1 : 2) : k1 == 1 ? (a.x >= a.z ? 0 : 2) : (a.x >= a.y ? 0 : 1);
+        float g = (a[k1] - a[k2]) / a[k1];                    /* 0 where the two axes tie */
+        const float band = 0.05;
+        march_planes(k1, ro, rd, ta, tb, nmax, coarse, L, T);
+        if ((nfl() & 1) != 0 && g < band) {
+            vec3 L2; float T2;
+            march_planes(k2, ro, rd, ta, tb, nmax, coarse, L2, T2);
+            float w = 0.5 + 0.5 * smoothstep(0.0, band, g);
+            L = mix(L2, L, w); T = mix(T2, T, w);
+        }
+    }
+    if ((nfl() & 4) != 0) { L = vec3(1.0 - T); T = 0.0; }  /* debug: opacity as opaque grey */
+    return vec4(L, T);
+}
+/* the march of texel q: with the coarse periphery (pipeline NEAR_COARSE, flag 64) coarse beyond the angle, blended with
+   the fine march over NEAR_FOV_BAND_DEG. One call site of the march per pipeline, in a loop the compiler must not unroll:
+   a second inlined copy of march_planes made the shader 7x larger (1.2 MB of SPIR-V) and every pass slower */
+vec4 march_texel(ivec2 q, int eye, float clip) {
+    if (NEAR_COARSE == 0) return march_texel_c(q, eye, clip, false);
+    float w = 0.0;                                                    /* 0 fine .. 1 coarse */
+    if ((nfl() & 64) != 0) {
+        vec3 r = cl_view_ray(near_centre(q));
+        float a = atan(length(r.xy)), a0 = atan(sqrt(intBitsToFloat(pc.i1.w)));
+        w = smoothstep(a0, a0 + radians(NEAR_FOV_BAND_DEG), a);
+    }
+    int ta = w >= 1.0 ? 1 : 0, tb = w > 0.0 ? 1 : 0;
+    vec4 acc = vec4(0.0);
+    [[dont_unroll]] for (int t = ta; t <= tb; t++)
+        acc += (ta == tb ? 1.0 : t == 0 ? 1.0 - w : w) * march_texel_c(q, eye, clip, t == 1);
+    return acc;
+}
+
+bool lens_hidden(ivec2 q, int eye) {
+    if ((nfl() & 128) == 0) return false;
+    int bw = (int(cl.sizes.y) + 7) / 8, bh = (int(cl.sizes.z) + 7) / 8;
+    int i = (eye * bh + q.y / 8) * bw + q.x / 8;
+    uint w = lens.bits[uint(pc.i0.w) * uint(NEAR_LENS_UINTS) + uint(i >> 5)];
+    return ((w >> uint(i & 31)) & 1u) != 0u;
+}
+/* ACZ_VR_CLOUD_NEAR_REUSE (flag 512): this texel's block has a reprojected far part (not flagged for a full march) */
+bool reuse_near_only(ivec2 q, int eye) {
+    if ((nfl() & 512) == 0) return false;
+    int bw = (int(cl.sizes.y) + 7) / 8, bh = (int(cl.sizes.z) + 7) / 8;
+    return flags.f[(eye * bh + q.y / 8) * bw + q.x / 8] == 0u;
+}
+/* flag 256: the history of a texel marched to (L, T): its part beyond the tier node and that part's depth */
+void store_hist(ivec2 q, int eye, float clip, vec4 r) {
+    if ((nfl() & 256) == 0) return;
+    vec3 ln = g_rec ? g_ln : r.rgb;                   /* (an early exit before the node: all of it is the near part) */
+    float tn = g_rec ? g_tn : r.a;
+    vec4 far = tn > 1.0e-3 ? vec4((r.rgb - ln) / tn, clamp(r.a / tn, 0.0, 1.0)) : vec4(0.0, 0.0, 0.0, 1.0);
+    vec4 v = vec4(1.0 / max(clip, 1.0), 0.0, clip, 0.0);
+    if (g_w > 1.0e-4) {
+        float m = g_iw / g_w;
+        v.xy = vec2(m, sqrt(max(g_iw2 / g_w - m * m, 0.0)));
+    }
+    imageStore(cl_near_far_img, ivec3(q, eye), far);
+    imageStore(cl_near_par_img, ivec3(q, eye), v);
+}
+bool outside_vis(ivec2 q, int eye) {
+    vec4 vis = cl.vis[eye];
+    ivec4 vt = NEAR_DIV == 2 ? ivec4(floor(vis.x * 0.5), floor(vis.y * 0.5), ceil(vis.z * 0.5), ceil(vis.w * 0.5))
+                             : ivec4(floor(vis.xy / float(NEAR_DIV)), ceil(vis.zw / float(NEAR_DIV)));
+    return (vt.z > vt.x && vt.w > vt.y && (q.x < vt.x || q.x >= vt.z || q.y < vt.y || q.y >= vt.w)) || lens_hidden(q, eye);
+}
+
+void main() {
+    ivec3 id = ivec3(gl_GlobalInvocationID);
+    int eye = id.z + pc.i0.x;
+    bool cb = (nfl() & 8) != 0, fill = (nfl() & 16) != 0;
+    if (id == ivec3(0) && !fill) in_cloud_probe();
+    ivec2 nsz = ivec2(cl.sizes.y, cl.sizes.z);
+    /* checkerboard: pass A the texels with (x + y) even, pass B the odd ones (dispatch x covers half the width) */
+    ivec2 q = cb ? ivec2(id.x * 2 + ((id.y + (fill ? 1 : 0)) & 1), id.y) : id.xy;
+    if (q.x >= nsz.x || q.y >= nsz.y) return;
+    g_w = 0.0; g_iw = 0.0; g_iw2 = 0.0; g_ln = vec3(0.0); g_tn = 1.0; g_rec = false;
+    /* outside the part of the eye image the headset shows (C2 vis, target pixels): no cloud (cheap; keeps the
+       mirror and the eye dumps clean) */
+    if (outside_vis(q, eye)) {
+        imageStore(cl_near_img, ivec3(q, eye), vec4(0.0, 0.0, 0.0, 1.0));
+        imageStore(cl_near_depth_img, ivec3(q, eye), vec4(cl.cfg.z));
+        store_hist(q, eye, cl.cfg.z, vec4(0.0, 0.0, 0.0, 1.0));
+        return;
+    }
+    /* (in-between frames, flag 512) the far part cloud_near_reuse.comp reprojected for this texel */
+    bool nonly = reuse_near_only(q, eye);
+    vec4 far = nonly ? imageLoad(cl_near_img, ivec3(q, eye)) : vec4(0.0, 0.0, 0.0, 1.0);
+    float clip = (nfl() & 512) != 0 ? imageLoad(cl_near_depth_img, ivec3(q, eye)).r : texel_clip(q, eye);
+    if ((nfl() & 512) == 0) imageStore(cl_near_depth_img, ivec3(q, eye), vec4(clip));
+    if (fill) {
+        /* the four marched neighbours: their mean where they agree (smooth fog), else march this texel too */
+        const ivec2 o[4] = ivec2[4](ivec2(-1, 0), ivec2(1, 0), ivec2(0, -1), ivec2(0, 1));
+        vec4 c[4];
+        bool ok = true;
+        float tol = 0.1 * clip + 1.0;
+        if ((NEAR_SPEC & 1) != 0) {
+            [[unroll]] for (int k = 0; k < 4; k++) {    /* (the same reads and tests, unrolled: c[] in registers) */
+                if (!ok) break;
+                ivec2 n = q + o[k];
+                if (n.x < 0 || n.y < 0 || n.x >= nsz.x || n.y >= nsz.y || outside_vis(n, eye)) { ok = false; break; }
+                c[k] = imageLoad(cl_near_img, ivec3(n, eye));
+                if (abs(imageLoad(cl_near_depth_img, ivec3(n, eye)).r - clip) > tol) ok = false;
+            }
+        } else
+        for (int k = 0; k < 4 && ok; k++) {
+            ivec2 n = q + o[k];
+            if (n.x < 0 || n.y < 0 || n.x >= nsz.x || n.y >= nsz.y || outside_vis(n, eye)) { ok = false; break; }
+            c[k] = imageLoad(cl_near_img, ivec3(n, eye));
+            if (abs(imageLoad(cl_near_depth_img, ivec3(n, eye)).r - clip) > tol) ok = false;
+        }
+        if (ok) {
+            vec4 lo = min(min(c[0], c[1]), min(c[2], c[3])), hi = max(max(c[0], c[1]), max(c[2], c[3]));
+            vec4 sp = hi - lo;
+            if (max(max(sp.r, sp.g), max(sp.b, sp.a)) < NEAR_FILL_TOL) {
+                imageStore(cl_near_img, ivec3(q, eye), (c[0] + c[1] + c[2] + c[3]) * 0.25);
+                if ((nfl() & 256) != 0) {             /* the history: its neighbours' mean (the clip its own) */
+                    vec4 fv = vec4(0.0), pv = vec4(0.0);
+                    for (int k = 0; k < 4; k++) {
+                        fv += imageLoad(cl_near_far_img, ivec3(q + o[k], eye));
+                        pv += imageLoad(cl_near_par_img, ivec3(q + o[k], eye));
+                    }
+                    imageStore(cl_near_far_img, ivec3(q, eye), fv * 0.25);
+                    imageStore(cl_near_par_img, ivec3(q, eye), vec4(pv.xy * 0.25, clip, 0.0));
+                }
+                return;
+            }
+        }
+    }
+    /* the march (its one call site): in full, or up to the tier node before a reprojected far part */
+    vec4 r = march_texel(q, eye, nonly ? min(clip, pc.f0.z) : clip);
+    if (nonly) {
+        r = vec4(r.rgb + r.a * far.rgb, r.a * far.a);
+        if ((nfl() & 1024) != 0) r.g += 0.15 * r.a + 0.05;     /* debug: a reprojected far part */
+    }
+    imageStore(cl_near_img, ivec3(q, eye), r);
+    store_hist(q, eye, clip, r);
+}

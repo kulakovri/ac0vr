@@ -1,0 +1,42 @@
+{
+ "0x002FF190": {
+  "name": "_request_end",
+  "src": "xmatch AC5 0x00331620 exact; AC5: sifrpc.o+0x300, masked-sig"
+ },
+ "0x002FF260": {
+  "name": "_alarm_rdata",
+  "src": "xmatch AC5 0x003316F0 exact; AC5: sifrpc.o+0x3D0, masked-sig"
+ },
+ "0x002FF2A0": {
+  "name": "_request_rdata",
+  "src": "xmatch AC5 0x00331730 exact; AC5: sifrpc.o+0x410, masked-sig"
+ },
+ "0x002FF370": {
+  "name": "sceSifGetOtherData",
+  "src": "xmatch AC5 0x00331800 fuzzy 0.94; AC5: sifrpc.o+0x4E0, order-aligned"
+ },
+ "0x002FF4D8": {
+  "name": "_search_svdata",
+  "src": "xmatch AC5 0x00331958 exact; AC5: sifrpc.o+0x648, masked-sig"
+ },
+ "0x002FF528": {
+  "name": "_alarm_bind",
+  "src": "xmatch AC5 0x003319A8 exact; AC5: sifrpc.o+0x698, masked-sig"
+ },
+ "0x002FF568": {
+  "name": "_request_bind",
+  "src": "xmatch AC5 0x003319E8 exact; AC5: sifrpc.o+0x6D8, masked-sig"
+ },
+ "0x002FF638": {
+  "name": "sceSifBindRpc",
+  "src": "xmatch AC5 0x00331AB8 callgraph 0.93; AC5: sifrpc.o+0x7A8; IDA: sends SIF cmd 0x80000009, writes cd->command/serve/tid"
+ },
+ "0x002FF788": {
+  "name": "_request_call",
+  "src": "xmatch AC5 0x00331BF8 exact; AC5: sifrpc.o+0x8F8, masked-sig"
+ },
+ "0x002FF818": {
+  "name": "sceSifCallRpc",
+  "src": "xmatch AC5 0x00331C88 callgraph 0.96; AC5: sifrpc.o+0x988; IDA: sends SIF cmd 0x8000000A, stores gp/func/para at cd+24/28/32"
+ }
+}

@@ -1,0 +1,40 @@
+# What you make from your own disc stays on your machine
+game/
+gen_zero/
+gen_*/
+generated/
+saves/
+out/
+cockpits/*.cpit
+*.iso
+*.gscap
+
+# Builds and logs
+build/
+build_ci_*
+*.o
+*.obj
+*.exe
+*.dll
+*.spv
+*.log
+__pycache__/
+*.py[cod]
+
+# Pictures and blobs: only the texture packs of the repository and the CI's own image are source
+*.ppm
+*.pgm
+*.png
+!textures/**/*.png
+*.bin
+!ci/tiny_gen/ps2_image.bin
+
+# Leftovers
+*.bak
+*.orig
+*.rej
+*~
+OpenXR-Simulator/
+NVIDIA Corporation/
+runtime_status.json
+settings.json

@@ -1,0 +1,42 @@
+#version 450
+// ACZ_REC_EXACT (ps2_recexact.c, ps2_video.c rx_*): the presented window image (copied into an RGBA8 image) to NV12 for
+// the frame-exact recording's encoder: BT.709 limited range (as OBS's "ACZ VR cine" profile: 709, partial), the
+// window's gamma-encoded values taken as they are. One invocation = 4 x 2 pixels: two words of Y (rows y, y + 1) and
+// one word of interleaved Cb Cr (the two 2 x 2 blocks' means). Width a multiple of 4, height of 2. A row of 64
+// invocations writes 256 contiguous bytes of each plane (coalesced; the buffer is device-local, copied to the host).
+layout(local_size_x = 64, local_size_y = 1) in;
+layout(set = 0, binding = 0, rgba8) uniform readonly image2D src;
+layout(set = 0, binding = 1, std430) writeonly buffer Out { uint d[]; };
+layout(push_constant) uniform P { uint w, h; } pc;
+
+const vec3 KY = vec3(0.2126, 0.7152, 0.0722);
+
+uint y8(vec3 c) { return uint(clamp(16.0 + 219.0 * dot(c, KY) + 0.5, 0.0, 255.0)); }
+
+void main() {
+    uint bx = gl_GlobalInvocationID.x, by = gl_GlobalInvocationID.y;
+    uint wq = pc.w >> 2u;
+    if (bx >= wq || by >= (pc.h >> 1u)) return;
+    ivec2 o = ivec2(int(bx * 4u), int(by * 2u));
+    vec3 a[4], b[4];
+    for (int i = 0; i < 4; i++) {
+        a[i] = imageLoad(src, o + ivec2(i, 0)).rgb;
+        b[i] = imageLoad(src, o + ivec2(i, 1)).rgb;
+    }
+    uint r0 = 0u, r1 = 0u;
+    for (int i = 0; i < 4; i++) {
+        r0 |= y8(a[i]) << (8u * uint(i));
+        r1 |= y8(b[i]) << (8u * uint(i));
+    }
+    d[uint(o.y) * wq + bx] = r0;
+    d[uint(o.y + 1) * wq + bx] = r1;
+    uint uv = 0u;
+    for (int k = 0; k < 2; k++) {
+        vec3 m = 0.25 * (a[2 * k] + a[2 * k + 1] + b[2 * k] + b[2 * k + 1]);
+        float yy = dot(m, KY);
+        uint u = uint(clamp(128.0 + 224.0 * (m.b - yy) / 1.8556 + 0.5, 0.0, 255.0));
+        uint v = uint(clamp(128.0 + 224.0 * (m.r - yy) / 1.5748 + 0.5, 0.0, 255.0));
+        uv |= (u | (v << 8u)) << (16u * uint(k));
+    }
+    d[pc.h * wq + by * wq + bx] = uv;
+}

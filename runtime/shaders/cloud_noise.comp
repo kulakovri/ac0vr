@@ -1,0 +1,69 @@
+#version 450
+/* Cloud noise textures (C4), generated once by ps2_clouds.c: kind 0 = base 128^3, kind 1 = detail 32^3. Tileable
+   (each texture is one period). Construction after sebh/TileableVolumeNoise (Sebastien Hillaire, MIT licence;
+   GPU Pro 7 / Nubis): base R = Perlin-Worley = remap(Perlin fBm (8 cells, 3 octaves), 0, 1, Worley fBm (8, 32, 56
+   cells), 1), G/B/A = Worley fBms at 32/56/80, 56/80/104, 80/104 cells; detail R/G/B = Worley fBms at 2/4/8, 4/8/16,
+   8/16 cells. Worley values are 1 - F1 (billowy). Written in GLSL here (no code copied). */
+layout(local_size_x = 4, local_size_y = 4, local_size_z = 4) in;
+#define CL_STORAGE
+#include "cloud_common.glsl"
+layout(push_constant) uniform PC { ivec4 size; ivec4 kind; vec4 f0; vec4 f1; } pc;
+
+uvec3 nhash3(uvec3 v) {
+    v = v * 1664525u + 1013904223u;
+    v.x += v.y * v.z; v.y += v.z * v.x; v.z += v.x * v.y;
+    v ^= v >> 16u;
+    v.x += v.y * v.z; v.y += v.z * v.x; v.z += v.x * v.y;
+    return v;
+}
+vec3 hash3f(vec3 c, float salt) { return vec3(nhash3(uvec3(ivec3(c) + 4096) + uvec3(uint(salt) * 7919u))) * (1.0 / 4294967296.0); }
+/* tileable Worley F1 distance (cells per period), 0 at a feature point */
+float worley(vec3 p, float cells) {
+    vec3 q = p * cells, i = floor(q), f = q - i;
+    float d = 1e9;
+    for (int z = -1; z <= 1; z++) for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+        vec3 o = vec3(x, y, z);
+        vec3 r = o + hash3f(mod(i + o, cells), cells) - f;
+        d = min(d, dot(r, r));
+    }
+    return sqrt(d);
+}
+float w1f(vec3 p, float cells) { return clamp(1.0 - worley(p, cells), 0.0, 1.0); }
+/* tileable gradient noise, -1..1 */
+float grad(vec3 c, vec3 f, float cells) {
+    vec3 h = hash3f(mod(c, cells), cells + 1000.0) * 2.0 - 1.0;
+    return dot(normalize(h + 1e-5), f);
+}
+float perlin(vec3 p, float cells) {
+    vec3 q = p * cells, i = floor(q), f = q - i;
+    vec3 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+    float n000 = grad(i, f, cells), n100 = grad(i + vec3(1, 0, 0), f - vec3(1, 0, 0), cells);
+    float n010 = grad(i + vec3(0, 1, 0), f - vec3(0, 1, 0), cells), n110 = grad(i + vec3(1, 1, 0), f - vec3(1, 1, 0), cells);
+    float n001 = grad(i + vec3(0, 0, 1), f - vec3(0, 0, 1), cells), n101 = grad(i + vec3(1, 0, 1), f - vec3(1, 0, 1), cells);
+    float n011 = grad(i + vec3(0, 1, 1), f - vec3(0, 1, 1), cells), n111 = grad(i + vec3(1, 1, 1), f - vec3(1, 1, 1), cells);
+    return mix(mix(mix(n000, n100, u.x), mix(n010, n110, u.x), u.y), mix(mix(n001, n101, u.x), mix(n011, n111, u.x), u.y), u.z);
+}
+float perlin_fbm01(vec3 p, float cells, int oct) {
+    float s = 0.0, a = 1.0, wsum = 0.0;
+    for (int i = 0; i < oct; i++) { s += a * perlin(p, cells); wsum += a; a *= 0.5; cells *= 2.0; }
+    return clamp(s / wsum * 0.9 + 0.5, 0.0, 1.0);
+}
+float cl_nremap(float v, float l0, float h0, float l1, float h1) { return l1 + (v - l0) * (h1 - l1) / (h0 - l0); }
+
+void main() {
+    ivec3 id = ivec3(gl_GlobalInvocationID);
+    if (any(greaterThanEqual(id, pc.size.xyz))) return;
+    vec3 p = (vec3(id) + 0.5) / vec3(pc.size.xyz);
+    if (pc.kind.x == 0) {
+        float w8 = w1f(p, 8.0), w32 = w1f(p, 32.0), w56 = w1f(p, 56.0), w80 = w1f(p, 80.0), w104 = w1f(p, 104.0);
+        float pf = perlin_fbm01(p, 8.0, 3);
+        float wfbm = w8 * 0.625 + w32 * 0.25 + w56 * 0.125;
+        float pw = clamp(cl_nremap(pf, 0.0, 1.0, wfbm, 1.0), 0.0, 1.0);
+        imageStore(cl_noise_base_img, id, vec4(pw, w32 * 0.625 + w56 * 0.25 + w80 * 0.125,
+                                               w56 * 0.625 + w80 * 0.25 + w104 * 0.125, w80 * 0.75 + w104 * 0.25));
+    } else {
+        float w2 = w1f(p, 2.0), w4 = w1f(p, 4.0), w8 = w1f(p, 8.0), w16 = w1f(p, 16.0);
+        imageStore(cl_noise_detail_img, id, vec4(w2 * 0.625 + w4 * 0.25 + w8 * 0.125, w4 * 0.625 + w8 * 0.25 + w16 * 0.125,
+                                                 w8 * 0.75 + w16 * 0.25, 1.0));
+    }
+}

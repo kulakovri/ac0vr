@@ -1,0 +1,183 @@
+{
+  "version": 9,
+  "about": [
+    "S5 art ramps for our clouds (CLOUDS_3D_RESEARCH_2026-10-20.md sections 5 and 8; loaded by ps2_clouds_art.c).",
+    "Colours are NOT in this file: they come from the game every frame through C1 (lit = the game's LIGHT cloud",
+    "colour, shadow = its DARK one, fog, sky_top, sky_hor, sky_below, incloud). This file says how S2 (far) and S3",
+    "(near) mix them and shape the clouds, per cloud kind.",
+    "Selection: 'missions' (mission number -> kind), then 'env_type' (raw env set +0x190 -> kind), else 'default'.",
+    "A kind inherits 'default' and overrides keys.",
+    "Zero's own cloud shading, measured from its impostor builds (missions 1, 3, 7, 13: the same numbers). With",
+    "c = cos(view direction, sun_dir) and D(q) = the cloud's opacity 0..1 at q:",
+    "  colour = mix(shadow, lit, t(c))",
+    "  colour = mix(colour, lit, a_light(c) * D(p - s_light * sun_dir))   (lit, except a rim on the side away from the sun)",
+    "  colour = mix(colour, shadow, a_dark(c) * D(p + s_dark * sun_dir))   (shadowed where cloud lies toward the sun)",
+    "s_light = rim_light / cloud_frac and s_dark = rim_dark / cloud_frac of a cloud's diameter (about 0.23 and 0.28).",
+    "The game evaluates t, a_light and a_dark once per frame with the camera's forward vector for all clouds on screen.",
+    "Ours should evaluate them per view direction, otherwise every cloud recolours when the head turns.",
+    "Curves: [[c, value], ...] points, or {a, b, min, max} = clamp(a + b c).",
+    "shape: C1 user[0] for B's density (base_period_m, detail_period_m, erosion, billow); 0 or missing = B's default.",
+    "ambient_top / ambient_base: extra mix toward sky_top on cloud tops and toward sky_below on bases (0 = the game,",
+    "which has none). fog: the game's fog colour and range from C1, times fog_scale, capped at fog_max.",
+    "near_fade_m / far_fade_m: the game's sprites fade in over 350..1000 m and out over 3..6 km. Our far map should",
+    "match the far fade. The near fade only exists because sprites cannot be flown through, so S3 ignores it.",
+    "shape (C1 user[0], B's density): [base-noise period m, detail period m, erosion 0..1, billow 0..1]; both periods",
+    "must divide 60000 m; [0, 0, 0, 0] = B's built-in defaults (4000, 600, 0.3, 0.5). The game's clouds are soft",
+    "painterly puffs: keep erosion low (detail erosion at 6-60 m reads as Flight Simulator).",
+    "shade (C1 shade -> user[1], cl_shade in cloud_common.glsl): base_darkening (t -= x (1 - local height)), thin_rim",
+    "(thin parts toward LIGHT), dark_core (dense cores toward DARK), dark_copy (strength of the 'cloud above' DARK copy).",
+    "art_k (C1 art_k -> user[3]) is derived, not set: (t a, t b, a_light a, a_dark a) of the selected curves.",
+    "near_art (C1 near_art -> user[2], S3): [incloud_mix (pull of samples deep in a blob toward C1 incloud),",
+    "near_contrast (lumps from density; per sample, ~3x attenuated along the ray: 0.5 gives the game's 20-28",
+    "level spread; keep <= 0.7 for comfort), extinction multiplier, light-sample weight (ACZ_VR_CLOUD_NEAR_LIGHT=1)].",
+    "Night (measured, mission 11): the game lights its clouds from the side opposite its night light (C1 sun_dir):",
+    "t = 0.404 - 0.407 c, a_light = 0.319 + 0.532 c, a_dark = 0.318 - 0.508 c with c = cos(view, sun_dir).",
+    "'sun_below' names a kind applied whenever sun_dir.y < 0 (no mission has that in S1's table).",
+    "incloud_t: C1 incloud while the game's sprites are dropped (our clouds on) or before any measurement = mix(shadow, lit, incloud_t); mission 1's measured in-cloud colour sits at 0.52 (0.2 levels off).",
+    "A/B 2026-10-21 (far renderer): cumulus 1000/300/0.35/0.8 (puffs ~1/6 of a 700 m cloud, as the game's impostors; still lozenge silhouettes: the blob profile dominates the outline in cl_density), overcast 4000/600/0.1/0.2 (M1 |diff| 17 -> 11.5 levels at field 2300).",
+    "S2 2026-10-21 gate 4: cumulus erosion 0.35 -> 0.12: with the core fill (ACZ_VR_CLOUD_FILL_CU) the detail erosion frayed the bank tops into a pixel-ragged edge at 3 km; 0.12 keeps soft lumps.",
+    "S2 2026-10-21 (S1's drawn sizes, CL_CLOUD_SPRITE: M3 bodies 2.5-6 km wide, 1-2.3 km tall): cumulus 3000/400 (was 1000/300: billows of ~125 m on a 4 km body are averaged away by the far march's noise prefilter and read as a smooth blob; at 3000 the mottling shows at 1-6 km; the outline lobes come from S2's envelope puffs, ACZ_VR_CLOUD_BILLOW).",
+    "incloud_t per kind: rain 0.62 (the game's frame inside mission 13's overcast, 116,134,134, sits at t 0.61-0.69 on its palette); C1 incloud also colours the cloud feel's volume, haze and cockpit light (ps2_video.c cloud_colour)."
+  ],
+  "default": {
+    "t_curve": {
+      "a": 0.577,
+      "b": 0.425,
+      "min": 0.0,
+      "max": 1.0
+    },
+    "a_light_curve": {
+      "a": 0.291,
+      "b": -0.594,
+      "min": 0.0,
+      "max": 1.0
+    },
+    "a_dark_curve": {
+      "a": 0.322,
+      "b": 0.557,
+      "min": 0.0,
+      "max": 1.0
+    },
+    "rim_light": 0.14,
+    "rim_dark": 0.167,
+    "rim_scale": 1.167,
+    "cloud_frac": 0.6,
+    "ambient_top": 0.0,
+    "ambient_base": 0.0,
+    "fog_scale": 1.0,
+    "fog_max": 1.0,
+    "opacity_max": 0.97,
+    "edge_softness": 0.35,
+    "near_fade_m": [
+      350.0,
+      1000.0
+    ],
+    "far_fade_m": [
+      3000.0,
+      6000.0
+    ],
+    "base_period_m": 4000.0,
+    "detail_period_m": 600.0,
+    "erosion": 0.2,
+    "billow": 0.5,
+    "base_darkening": 0.15,
+    "thin_rim": 0.5,
+    "dark_core": 0.25,
+    "dark_copy": 1.0,
+    "near_art": [
+      0.8,
+      0.5,
+      1.0,
+      0.6
+    ],
+    "incloud_t": 0.52
+  },
+  "kinds": {
+    "cumulus": {
+      "about": "broken fair-weather cumulus (mission 3): separate puffy clouds, soft edges, lit tops, dark rim below",
+      "edge_softness": 0.3,
+      "billow": 0.8,
+      "base_period_m": 3000.0,
+      "near_art": [
+        0.75,
+        0.5,
+        1.0,
+        0.6
+      ],
+      "detail_period_m": 400.0,
+      "erosion": 0.12
+    },
+    "overcast": {
+      "about": "stratus deck / overcast layer (mission 1): wide, flat, soft veil; strong haze",
+      "edge_softness": 0.55,
+      "opacity_max": 0.99,
+      "base_period_m": 4000.0,
+      "erosion": 0.1,
+      "billow": 0.2,
+      "near_art": [
+        0.85,
+        0.5,
+        1.0,
+        0.6
+      ],
+      "detail_period_m": 600.0
+    },
+    "rain": {
+      "about": "rain overcast (missions 7, 13): flat and dim; the dome is brighter at the zenith than at the horizon",
+      "edge_softness": 0.6,
+      "opacity_max": 0.99,
+      "base_period_m": 6000.0,
+      "erosion": 0.1,
+      "billow": 0.25,
+      "near_art": [
+        0.85,
+        0.45,
+        1.0,
+        0.6
+      ],
+      "incloud_t": 0.62
+    },
+    "dusk": {
+      "about": "dusk (mission 6): golden LIGHT over a dark olive base; same model, the palette does the work",
+      "edge_softness": 0.45
+    },
+    "night": {
+      "about": "night (mission 11): dark brown clouds. C1 sun_dir is the night light the game draws as its disc (the env-set angles, +35 deg), but the clouds are lit from the opposite side: t lowest looking at the disc. Hence the negative t slope (art_k.y < 0 tells cl_shade to use c' = -c)",
+      "edge_softness": 0.55,
+      "t_curve": {
+        "a": 0.404,
+        "b": -0.407,
+        "min": 0.0,
+        "max": 1.0
+      },
+      "a_light_curve": {
+        "a": 0.319,
+        "b": 0.532,
+        "min": 0.0,
+        "max": 1.0
+      },
+      "a_dark_curve": {
+        "a": 0.318,
+        "b": -0.508,
+        "min": 0.0,
+        "max": 1.0
+      },
+      "near_art": [
+        0.85,
+        0.35,
+        1.0,
+        0.6
+      ]
+    }
+  },
+  "sun_below": "night",
+  "missions": {
+    "1": "overcast",
+    "3": "cumulus",
+    "6": "dusk",
+    "7": "rain",
+    "11": "night",
+    "13": "rain"
+  },
+  "env_type": {}
+}

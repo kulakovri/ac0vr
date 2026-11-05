@@ -1,0 +1,63 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+/* cloud_optics.comp - the optics probe (ACZ_VR_OPTICS, ps2_clouds_optics.c): one workgroup early in the command buffer
+   (after the weather pass, before the cloud shadow pass and the far update, so it overlaps the game's draws and the
+   shadow pass's barrier orders it and makes its result visible to the host). Two rays from the centre eye -- toward
+   the antisolar point a = -sun and toward the sun -- each sampled at 64 points over the near range (the shared
+   density, as the near volume marches it), plus the far map (the previous frame's, complete) along both directions;
+   then the sun ray from the surface found along a (64 samples over 2 km). Written into this frame slot's two vec4 of a
+   host-visible buffer; the CPU reads them when the slot comes round again (its fence has passed) and smooths them:
+     slot[2 i]     x D: distance (m) of the cloud surface along a (optical depth 1 into the near cloud, else the far
+                     map's mean distance where its transmittance < 0.6; 0 = none), y the surface's opacity,
+                   z the sun's transmittance at that point (multiple-scattering softened like the cloud shadow map;
+                     1 = full sun), w the optical depth of the first two samples (the eye inside cloud)
+     slot[2 i + 1] x the near transmittance toward the sun, y the far map's transmittance toward the sun,
+                   z 1 = the surface was found in the near range, w the far map's transmittance along a */
+#include "cloud_common.glsl"
+layout(local_size_x = 64) in;
+layout(set = 1, binding = 0, std430) buffer OptProbe { vec4 slot[]; } probe;
+/* i0.x frame slot; f0.x near range (m; 0 = no near volume: the far map starts at the eye), f0.y extinction scale */
+layout(push_constant) uniform PC { ivec4 i0; ivec4 i1; vec4 f0; vec4 f1; } pc;
+shared float s_a[64], s_s[64];
+shared vec4 s_r0, s_r1;
+
+void main() {
+    uint i = gl_LocalInvocationIndex;
+    vec3 sun = cl.sun.xyz, a = -sun;
+    float R = pc.f0.x, dt = R / 64.0, sg = cl_extinction() * pc.f0.y;
+    float t = (float(i) + 0.5) * dt, oa = 0.0, os = 0.0;
+    if (R > 0.0) {
+        oa = cl_density(a * t, true) * sg * dt;
+        os = cl_density(sun * t, false) * sg * dt;
+    }
+    s_a[i] = oa; s_s[i] = os;
+    barrier();
+    if (i == 0u) {
+        float cum = 0.0, D = 0.0, osum = 0.0;
+        int found = 0;
+        for (int k = 0; k < 64; k++) {
+            float n = cum + s_a[k];
+            if (found == 0 && n >= 1.0) { D = (float(k) + (1.0 - cum) / max(s_a[k], 1.0e-6)) * dt; found = 1; }
+            cum = n;
+            osum += s_s[k];
+        }
+        vec2 uva = cl_dir_tex_uv(a), uvs = cl_dir_tex_uv(sun);
+        float ta = textureLod(cl_dir_tex, uva, 0.0).a, da = textureLod(cl_dir_depth_tex, uva, 0.0).r;
+        float ts = textureLod(cl_dir_tex, uvs, 0.0).a;
+        float op = found == 1 ? 1.0 - exp(-cum) : 0.0;
+        if (found == 0 && ta < 0.6 && da < 60000.0) { D = max(da, R); op = 1.0 - ta; }
+        s_r0 = vec4(D, op, 0.0, s_a[0] + s_a[1]);
+        s_r1 = vec4(exp(-osum), ts, float(found), ta);
+    }
+    barrier();
+    /* the sun's light at the surface point: the optical depth toward the sun over 2 km */
+    float D = s_r0.x, ds = 2000.0 / 64.0;
+    s_s[i] = D > 0.0 ? cl_density(a * D + sun * ((float(i) + 0.5) * ds), false) * sg * ds : 0.0;
+    barrier();
+    if (i != 0u) return;
+    float od = 0.0;
+    for (int k = 0; k < 64; k++) od += s_s[k];
+    int s = pc.i0.x;
+    probe.slot[2 * s] = vec4(s_r0.x, s_r0.y, D > 0.0 ? max(exp(-od), 0.7 * exp(-0.25 * od)) : 1.0, s_r0.w);
+    probe.slot[2 * s + 1] = s_r1;
+}

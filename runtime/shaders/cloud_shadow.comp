@@ -1,0 +1,135 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+/* cloud_shadow.comp - the cloud shadow map (ACZ_VR_CLOUD_SHADOW; ps2_clouds_shadow.c records it, cloud_shadow.glsl
+   documents the map and the lookup). One dispatch per command buffer, two kinds of workgroups:
+     build  (the first i0.w groups) one slice of rows of the ring layer being built: per texel one light ray through
+            the band, sampled with the weather window's cloud envelope (C3 weather: R coverage x the column's vertical
+            profile x A density, the shared C4 shape without the 3D noise: the noise's mean over its remap), recording
+            the first occluder's altitude and the optical depth at D1 / D2 below it and at the band base. The map is
+            the long range of the shading (cloud_common.glsl cl_cast_t: the "cloud above" probe's own noise sample keeps
+            the local detail), so it can be smooth; without the 3D noise reads the slice costs about half.
+            32 threads per ray, 1-4 samples each, then one thread walks the ray's optical depths from the light down
+            in shared memory (a serial march left the GPU idle). Group 0's first thread also reads the shown state at
+            the centre eye (the aircraft) into the probe slot for the cockpit light.
+     blend  (the rest) the shown map = the previous complete layer (resampled to the newer layer's band) blended
+            toward the newest complete layer by the rebuild's progress, so a rebuild never pops. The layers it reads
+            are never the one being built (the rotation takes effect after this frame).
+   World-fixed (toroidal by cloud-frame position), no screen-space history: both eyes and the near and far passes read
+   the same texels. */
+#define CL_STORAGE
+#include "cloud_common.glsl"
+
+layout(set = 1, binding = 0, rgba16f) uniform image2DArray sh_ring;   /* the build ring: 3 layers */
+layout(set = 1, binding = 1, rgba16f) uniform image2D sh_disp;        /* the shown map (= binding 16 of set 0) */
+layout(set = 1, binding = 2, std430) buffer ShProbe { vec4 slot[]; } sh_probe;   /* this frame slot's probe */
+
+/* i0 = build layer, first row, rows, build groups; i1 = samples per thread (1..4: 32 x that along each ray), previous
+   layer, newest layer, probe (>= 0: write it); f0 = light direction (unit, y >= sin 8 deg), weight of the newest layer;
+   f1 = build band: base, top, D1, D2. ShBands: prev / last = the blend's layers: base, D1, D2; misc.x = the weather
+   limit (m: no clouds beyond this |x|, |z| from the eye) */
+layout(push_constant) uniform ShPC { ivec4 i0; ivec4 i1; vec4 f0; vec4 f1; } pc;
+/* (64 bytes: the previous / newest layers' band comes from a small uniform written per frame) */
+layout(set = 1, binding = 3, std140) uniform ShBands { vec4 prev; vec4 last; vec4 misc; } sb;
+
+#define SH_LANES 32
+layout(local_size_x = SH_LANES, local_size_y = 2) in;
+shared float s_od[2][SH_LANES * 4];
+
+vec4 sh_weather(vec3 q) {               /* the weather window; nothing beyond its trusted part (no toroidal repeats) */
+    return max(abs(q.x), abs(q.z)) < sb.misc.x ? cl_weather(q) : vec4(0.0, 0.0, 1.0, 0.0);
+}
+/* the envelope density: C4's blob e (coverage x the column's vertical profile, as cl_density_tx) through the mean of
+   the noise remap clamp((n - (1 - e)) / e): small near the surface, ~0.5 in the core */
+float sh_density(vec3 q) {
+    vec4 wx = sh_weather(q);
+    float h = cl_height_frac(q);
+    if (h <= 0.0 || h >= 1.0 || wx.r < 0.01 || wx.a <= 0.0) return 0.0;
+    float hl = (h - wx.g) / max(wx.b - wx.g, 1.0e-3);
+    if (hl <= 0.0 || hl >= 1.0) return 0.0;
+    float prof = cl.fogr.z > 0.5 ? smoothstep(0.0, 0.12, hl) * (1.0 - smoothstep(0.75, 1.0, hl)) : cl_profile(hl, cl.band.w);
+    float e = clamp(wx.r * prof, 0.0, 1.0);
+    return 0.5 * e * e * (3.0 - 2.0 * e) * wx.a;
+}
+/* the shown state at p (bilinear over the two complete layers, weight f0.w): for the cockpit probe */
+vec4 sh_state(ivec2 t, int N) {
+    ivec2 q = ivec2(t.x & (N - 1), t.y & (N - 1));
+    vec4 a = imageLoad(sh_ring, ivec3(q, pc.i1.y)), b = imageLoad(sh_ring, ivec3(q, pc.i1.z));
+    return mix(a, b, pc.f0.w);
+}
+
+void main() {
+    int N = imageSize(sh_ring).x;
+    uint g = gl_WorkGroupID.x;
+    uint lane = gl_LocalInvocationID.x, ray = gl_LocalInvocationID.y;
+    if (g >= uint(pc.i0.w)) {                           /* blend: 64 texels a group */
+        uint i = (g - uint(pc.i0.w)) * 64u + ray * uint(SH_LANES) + lane;
+        ivec2 id = ivec2(i % uint(N), i / uint(N));
+        if (id.y >= N) return;
+        vec4 b = imageLoad(sh_ring, ivec3(id, pc.i1.z));
+        float w = pc.f0.w;
+        if (w < 1.0) {
+            vec4 a = imageLoad(sh_ring, ivec3(id, pc.i1.y));
+            if (sb.prev.xyz != sb.last.xyz)               /* the older layer in the newer one's band and offsets */
+                a = vec4(a.r, cl_shadow_eval(a, a.r - sb.last.y, sb.prev.x, sb.prev.y, sb.prev.z),
+                         cl_shadow_eval(a, a.r - sb.last.z, sb.prev.x, sb.prev.y, sb.prev.z),
+                         cl_shadow_eval(a, sb.last.x, sb.prev.x, sb.prev.y, sb.prev.z));
+            b = mix(a, b, w);
+        }
+        imageStore(sh_disp, id, b);
+        return;
+    }
+    if (g == 0u && lane == 0u && ray == 0u && pc.i1.w >= 0) {
+        /* the shown state at the centre eye: the newest layer's parameters (the cockpit's value is smoothed) */
+        vec4 s0 = cl.shd[0], s1 = cl.shd[1], s2 = cl.shd[2];
+        float od = 0.0, w = 0.0;
+        if (s0.w > 0.0) {
+            vec2 q = -s1.xy * (s1.w - s1.z);                /* the eye's light ray at the base plane */
+            vec2 u = (s0.xy + q * s0.z) * float(N) - 0.5, f = fract(u);
+            ivec2 t = ivec2(floor(u));
+            vec4 v = mix(mix(sh_state(t, N), sh_state(t + ivec2(1, 0), N), f.x),
+                         mix(sh_state(t + ivec2(0, 1), N), sh_state(t + ivec2(1, 1), N), f.x), f.y);
+            od = cl_shadow_eval(v, s1.w, s1.z, s2.x, s2.y) * s0.w;
+            w = 1.0;
+        }
+        sh_probe.slot[0] = vec4(mix(1.0, cl_shadow_t(od), w), od, w, 1.0);   /* (this frame slot's own range) */
+    }
+    ivec2 id = ivec2((g % uint(N / 2)) * 2u + ray, g / uint(N / 2) + uint(pc.i0.y));
+    bool live = id.y < pc.i0.y + pc.i0.z && id.y < N;
+    /* the texel's base-plane point: the copy nearest the eye of its toroidal cloud-frame position */
+    vec2 xz = ((vec2(id) + 0.5) / float(N) - cl.wx.xy) * CL_WEATHER_M;
+    xz -= CL_WEATHER_M * round(xz / CL_WEATHER_M);
+    float base = pc.f1.x, top = pc.f1.y, d1 = pc.f1.z, d2 = pc.f1.w;
+    vec3 L = pc.f0.xyz;
+    vec3 p0 = vec3(xz.x, base - cl.origin.y, xz.y);
+    int spt = clamp(pc.i1.x, 1, 4), n = SH_LANES * spt;
+    float len = (top - base) / L.y, ds = len / float(n), dy = ds * L.y;
+    float sig = cl_extinction() * ds;
+    /* sample k (0 = the top segment, from the light down) spans altitudes [top - (k + 1) dy, top - k dy] */
+    for (int j = 0; j < spt; j++) {
+        int k = int(lane) * spt + j;
+        float dd = 0.0;
+        if (live) {
+            vec3 q = p0 + L * ((top - (float(k) + 0.5) * dy - base) / L.y);
+            dd = sh_density(q) * sig;
+        }
+        s_od[ray][k] = dd;
+    }
+    barrier();
+    if (lane != 0u || !live) return;
+    float od = 0.0, ytop = base, o1 = -1.0, o2 = -1.0;
+    bool hit = false;
+    for (int k = 0; k < n; k++) {
+        float dd = s_od[ray][k];
+        float yh = top - float(k) * dy, yl = yh - dy;
+        if (!hit) {
+            if (dd <= 0.0) continue;
+            hit = true; ytop = yh;
+        }
+        float y1 = ytop - d1, y2 = ytop - d2;
+        if (o1 < 0.0 && y1 >= yl) o1 = od + dd * clamp((yh - y1) / dy, 0.0, 1.0);
+        if (o2 < 0.0 && y2 >= yl) o2 = od + dd * clamp((yh - y2) / dy, 0.0, 1.0);
+        od += dd;
+    }
+    vec4 o = hit ? vec4(ytop, o1 < 0.0 ? od : o1, o2 < 0.0 ? od : o2, od) : vec4(base, 0.0, 0.0, 0.0);
+    imageStore(sh_ring, ivec3(id, pc.i0.x), o);
+}

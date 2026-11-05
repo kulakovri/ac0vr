@@ -1,0 +1,23 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+/* cloud_wake.comp - the cloud wake's probe (ACZ_VR_CLOUD_WAKE, ps2_clouds_wake.c; agent cl_wake 2026-10-29): our
+   clouds' density around up to 32 aircraft, so zero_trails.c knows which aircraft is inside one of our clouds and
+   where it leaves it. One thread per sample: 8 corners of a cube (half size w) about each point (cloud space, metres
+   relative to this frame's centre eye), the shared density with its detail octave (cl_density: what the near volume
+   marches). Recorded early in a game frame's command buffer next to the optics probe; the CPU reads the answers when
+   the frame slot comes round again (its fence has passed).
+   Buffer (set 1 binding 0), per frame slot s at f[384 s]: 32 points x vec4 (xyz, w = half size), then 256 answers. */
+#include "cloud_common.glsl"
+layout(local_size_x = 64) in;
+layout(set = 1, binding = 0, std430) buffer WakeProbe { float f[]; } io;
+/* i0.x frame slot, i0.y points */
+layout(push_constant) uniform PC { ivec4 i0; ivec4 i1; vec4 f0; vec4 f1; } pc;
+
+void main() {
+    uint i = gl_GlobalInvocationID.x, k = i >> 3u, c = i & 7u;
+    if (k >= uint(pc.i0.y)) return;
+    uint b = uint(pc.i0.x) * 384u;
+    vec4 q = vec4(io.f[b + 4u * k], io.f[b + 4u * k + 1u], io.f[b + 4u * k + 2u], io.f[b + 4u * k + 3u]);
+    vec3 o = vec3((c & 1u) != 0u ? 1.0 : -1.0, (c & 2u) != 0u ? 1.0 : -1.0, (c & 4u) != 0u ? 1.0 : -1.0) * q.w;
+    io.f[b + 128u + i] = cl_density(q.xyz + o, true);
+}
