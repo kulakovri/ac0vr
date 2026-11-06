@@ -25,6 +25,11 @@ find_package(Threads REQUIRED)
 set(PS2_SDK_DIR "" CACHE PATH "headers and import libraries of SDL3, the OpenXR loader and vulkan-1 (the player's build)")
 set(PS2_PREBUILT_SPIRV "" CACHE PATH "a folder of compiled .spv files: copied instead of running glslc (the player's build)")
 option(PS2_BUILD_GSREPLAY "also build the gsreplay tool" ON)
+# a release's objects name no folder of the machine that built them (__FILE__ in asserts; tools/setup/release_scan.py checks)
+option(PS2_STRIP_PATHS "compile with -ffile-prefix-map: no absolute source paths in the binaries" OFF)
+if(PS2_STRIP_PATHS)
+  add_compile_options("-ffile-prefix-map=${CMAKE_SOURCE_DIR}=." "-ffile-prefix-map=${CMAKE_BINARY_DIR}=.")
+endif()
 if(PS2_SDK_DIR)
   set(SDL3_INCLUDE_DIRS "${PS2_SDK_DIR}/include")
   set(SDL3_LIBRARY_DIRS "${PS2_SDK_DIR}/lib")
@@ -57,6 +62,8 @@ list(APPEND GENERATED_SOURCES
 set(RUNTIME_SOURCES
     runtime/src/ps2_core.c
     runtime/src/ps2_crash.c
+    runtime/src/ps2_path.c
+    runtime/src/ps2_version.c
     runtime/src/ps2_hostprof.c
     runtime/src/ps2_hw.c
     runtime/src/ps2_gfxq.c
@@ -151,7 +158,7 @@ set_source_files_properties(${IMGUI_SOURCES} PROPERTIES COMPILE_OPTIONS "-w")
 list(APPEND RUNTIME_SOURCES ${IMGUI_SOURCES})
 
 add_executable(ac5 ${RUNTIME_SOURCES} ${GENERATED_SOURCES})
-target_sources(ac5 PRIVATE runtime/src/zero_vr.c runtime/src/zero_menus.c runtime/src/zero_audio3d.c runtime/src/zero_syssnd.c runtime/src/zero_clouds.c runtime/src/zero_terrain.c runtime/src/zero_terrain_mat.c runtime/src/zero_props.c runtime/src/zero_water.c runtime/src/zero_texpack.c runtime/src/zero_trails.c runtime/src/zero_cracks.c runtime/src/zero_flyby.c runtime/src/ps2_xr.c)
+target_sources(ac5 PRIVATE runtime/src/ps2_profile.c runtime/src/zero_vr.c runtime/src/zero_menus.c runtime/src/zero_audio3d.c runtime/src/zero_syssnd.c runtime/src/zero_clouds.c runtime/src/zero_terrain.c runtime/src/zero_terrain_mat.c runtime/src/zero_props.c runtime/src/zero_water.c runtime/src/zero_texpack.c runtime/src/zero_trails.c runtime/src/zero_cracks.c runtime/src/zero_flyby.c runtime/src/ps2_xr.c)
 target_link_libraries(ac5 PRIVATE openxr_loader)
 target_include_directories(ac5 PRIVATE runtime/include "${GEN_DIR}"
                                        ${IMGUI_DIR} ${IMGUI_DIR}/backends
@@ -180,6 +187,27 @@ set_source_files_properties(${GENERATED_SOURCES} PROPERTIES
 
 set(HOT_SOURCES runtime/src/ps2_vu.c runtime/src/ps2_gs.c runtime/src/ps2_hw.c)
 set_source_files_properties(${HOT_SOURCES} PROPERTIES COMPILE_OPTIONS "-O3")
+
+# Every path in the runtime's C files is UTF-8 (runtime/include/ps2_path.h, setup_1105). Not ps2_vu.c: the player's PC compiles it
+# without this flag and its dumps go to relative paths; not the generated code, third-party code or C++.
+get_target_property(PS2_AC5_SOURCES ac5 SOURCES)
+set(PS2_UTF8_SOURCES ${PS2_AC5_SOURCES} ${RUNTIME_SOURCES})
+list(REMOVE_DUPLICATES PS2_UTF8_SOURCES)
+list(FILTER PS2_UTF8_SOURCES INCLUDE REGEX "^runtime/src/.*[.]c$")
+list(REMOVE_ITEM PS2_UTF8_SOURCES runtime/src/ps2_vu.c runtime/src/ps2_path.c runtime/src/ps2_version.c)
+set_property(SOURCE ${PS2_UTF8_SOURCES} APPEND PROPERTY COMPILE_OPTIONS "-includeps2_path.h")   # (joined: GCC and clang both take it)
+
+# The version (setup_1105): ps2_version.h in the build folder, from git at every build, written only when it changed; only
+# runtime/src/ps2_version.c includes it. -DACZ_VERSION=0.1.0 sets it (make_release.sh), the fallback is 0.1.0-dev.
+set(ACZ_VERSION "" CACHE STRING "the version string (empty: from git describe, else 0.1.0-dev)")
+set(ACZ_VERSION_GIT "" CACHE STRING "the commit shown beside the version (empty: from git)")
+add_custom_target(ps2_version_h
+  COMMAND "${CMAKE_COMMAND}" "-DSRC=${CMAKE_SOURCE_DIR}" "-DOUT=${CMAKE_BINARY_DIR}/ps2_version.h" "-DACZ_VERSION=${ACZ_VERSION}"
+          "-DACZ_VERSION_GIT=${ACZ_VERSION_GIT}" -P "${CMAKE_SOURCE_DIR}/tools/setup/write_version.cmake"
+  BYPRODUCTS "${CMAKE_BINARY_DIR}/ps2_version.h" VERBATIM)
+set_property(SOURCE runtime/src/ps2_version.c APPEND PROPERTY INCLUDE_DIRECTORIES "${CMAKE_BINARY_DIR}")
+set_property(SOURCE runtime/src/ps2_version.c APPEND PROPERTY OBJECT_DEPENDS "${CMAKE_BINARY_DIR}/ps2_version.h")
+add_dependencies(ac5 ps2_version_h)
 
 if(PS2_DIAG)
   target_compile_definitions(ac5 PRIVATE PS2_DIAG=1)
@@ -226,6 +254,8 @@ endif()
 if(PS2_VU0_ADV_INLINE)
   target_compile_definitions(gsreplay PRIVATE PS2_VU0_ADV_INLINE=1)
 endif()
+
+add_dependencies(gsreplay ps2_version_h)
 
 target_compile_options(gsreplay PRIVATE
     -fno-strict-aliasing -fwrapv
@@ -421,4 +451,31 @@ if(NOT HAVE_MUSTTAIL)
   message(WARNING
     "This compiler has no musttail attribute. Cross-function guest loops will "
     "consume stack. GCC 15+ or Clang 13+ is required for a correct build.")
+endif()
+
+# ac0vr.exe (setup_1105): the player's entry point and the shortcut's target, shipped prebuilt: the first-run dialog, the build's progress
+# (tools/setup/ac0vr_launcher.c). Win32 only, no SDL, no game code. The updater comes in when its files are in the tree.
+option(PS2_BUILD_AC0VR "build ac0vr.exe, the player's launcher" ON)
+if(WIN32 AND PS2_BUILD_AC0VR)
+  set(AC0VR_SOURCES tools/setup/ac0vr_launcher.c)
+  include(CheckLanguage)
+  check_language(RC)
+  if(CMAKE_RC_COMPILER)
+    enable_language(RC)
+    list(APPEND AC0VR_SOURCES tools/setup/ac0vr.rc)
+  endif()
+  set(AC0VR_LIBS ole32 uuid comctl32 comdlg32 shell32 gdi32)
+  set(AC0VR_DEFS "")
+  if(EXISTS "${CMAKE_SOURCE_DIR}/tools/setup/ac0vr_update.c")           # (ac0vr_launcher.c includes it)
+    list(APPEND AC0VR_SOURCES third_party/miniz/miniz.c)
+    set_source_files_properties(third_party/miniz/miniz.c PROPERTIES COMPILE_OPTIONS "-w")
+    list(APPEND AC0VR_LIBS winhttp shlwapi)
+    set(AC0VR_DEFS MINIZ_NO_STDIO MINIZ_NO_ARCHIVE_WRITING_APIS MINIZ_NO_TIME MINIZ_NO_ZLIB_COMPATIBLE_NAMES)
+  endif()
+  add_executable(ac0vr WIN32 ${AC0VR_SOURCES})
+  target_compile_definitions(ac0vr PRIVATE ${AC0VR_DEFS})
+  target_include_directories(ac0vr PRIVATE tools/setup third_party/miniz)
+  target_compile_options(ac0vr PRIVATE $<$<COMPILE_LANGUAGE:C>:-Os -municode>)
+  target_link_options(ac0vr PRIVATE -municode -s -static-libgcc)
+  target_link_libraries(ac0vr PRIVATE ${AC0VR_LIBS})
 endif()

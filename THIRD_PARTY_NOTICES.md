@@ -13,6 +13,7 @@ not linked into the program and not in this source tree.
 | stb_truetype, stb_rectpack, stb_textedit, Sean Barrett (through ImGui; the quit panel's text) | `third_party/imgui/imstb_*.h` | as in ImGui | MIT or public domain, at your choice | end of each file |
 | ProggyClean and ProggyForever fonts, Tristan Grimmer (embedded in ImGui as its default fonts) | `third_party/imgui/imgui_draw.cpp` | as in ImGui | MIT | ImGui's `docs/FONTS.md` upstream |
 | Lua, PUC-Rio (mod scripts) | `third_party/lua` | 5.4.9 | MIT | `third_party/lua/LICENSE.html` |
+| miniz, Rich Geldreich and others (unpacks an update in `ac0vr.exe`) | `third_party/miniz` | 3.0.2 | MIT | `third_party/miniz/LICENSE` |
 
 The upstream licences' copyright lines stay in those files. Removing them is not allowed by their terms.
 
@@ -32,6 +33,16 @@ MSYS2 UCRT64 packages, versions as tested. A binary release has to carry these l
 
 Build tools only, nothing of them ends up in the program: GCC (GPL-3.0-or-later), CMake (BSD-3-Clause), Ninja (Apache-2.0), glslc / shaderc (Apache-2.0; the
 compiled SPIR-V is ours), Python (PSF).
+
+## In the installer and the update, not in this repository
+
+`tools/setup/make_release.sh` puts these into a release, with their licence files in `licenses/`, `bundle/toolchain/` and `python/`.
+
+| Component | Used as | Tested version | Licence |
+|---|---|---|---|
+| llvm-mingw (clang, lld, compiler-rt, libc++; mingw-w64 headers and runtime), cut down to what a build uses | `bundle/toolchain/`: compiles the game on the player's PC | 20261020 | Apache-2.0 with LLVM exception; mingw-w64: ZPL, BSD-style |
+| Ninja | `bundle/toolchain/bin/ninja.exe` | as in w64devkit 2.11.0 | Apache-2.0 |
+| Python embeddable package | `python/`: runs the recompilers | 3.12.10 | PSF-2.0 |
 
 ## Optional tools the scripts can use
 

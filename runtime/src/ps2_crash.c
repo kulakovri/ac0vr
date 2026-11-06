@@ -13,6 +13,7 @@
    ACZ_CRASH_TEST=av|so|abort|fatal (test only, tools/docs/env_template.md): from field ACZ_CRASH_TEST_FIELD (default 300) a
    new thread writes to a null pointer, overflows its stack, calls abort(), or asks for a fatal report and the game goes on. */
 #include "ps2_crash.h"
+#include "ps2_profile.h"
 #include "ps2_runtime.h"
 
 #include <stdarg.h>
@@ -183,6 +184,7 @@ static void write_report(const char *why, EXCEPTION_POINTERS *ep, DWORD tid, int
             "file and the .dmp; the log lines below can hold your folder names, so read them first.\r\n\r\n");
     putf(h, "what:     %s\r\n", why ? why : "?");
     putf(h, "when:     %04u-%02u-%02u %02u:%02u:%02u (local)\r\n", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+    putf(h, "version:  %s\r\n", ps2_version_line());
     putf(h, "field:    %u\r\n", (unsigned)ps2_gs_frame_count);
     {
         wchar_t ex[MAX_PATH];

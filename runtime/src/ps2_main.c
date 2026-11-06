@@ -12,9 +12,11 @@
 #include "ps2_vfs.h"
 #include "rn.h"
 #include "ps2_quit.h"
+#include "ps2_profile.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 #include <time.h>
 #include <pthread.h>
 #include <unistd.h>
@@ -73,7 +75,7 @@ static int load_image(const char *dir) {
              (dir && *dir) ? "/" : "", image_path);
     fp = fopen(path, "rb");
     if (!fp) {
-        fprintf(stderr, "cannot open memory image '%s'\n", path);
+        fprintf(stderr, "cannot open memory image '%s': %s\n", path, strerror(errno));
         return -1;
     }
     fseek(fp, 0, SEEK_END);
@@ -448,7 +450,7 @@ static LONG WINAPI ps2_crash_filter(EXCEPTION_POINTERS *ep) {
 
 int main(int argc, char **argv) {
     ps2_settings_defaults(&ps2_cfg);
-    const char *dir = ".";
+    const char *dir = ps2_profile_data_dir();    /* "gen_zero" beside the exe for a player's start (ps2_profile.c) */
     const char *disc = NULL;
     int want_video = 1, want_profile = 0, want_selftest = 0, want_vif_test = 0, want_vu_test = 0;
     int want_gs_test = 0, want_spu2_test = 0, want_hle_test = 0;
@@ -467,6 +469,8 @@ int main(int argc, char **argv) {
     SetUnhandledExceptionFilter(ps2_crash_filter);
     ps2_crash_init((void *)ps2_crash_filter);
 #endif
+    ps2_profile_args(&argc, &argv);              /* UTF-8: a --disc or --data path may be outside the code page */
+    if (ps2_profile_player()) watchdog_seconds = 0;
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--data") && i + 1 < argc) dir = argv[++i];
@@ -524,7 +528,7 @@ int main(int argc, char **argv) {
             have_stop_scene = 1;
         }
         else if (!strcmp(argv[i], "--help")) {
-            printf("usage: %s [--data DIR] [--disc ISO-or-DIR]\n"
+            printf("usage: %s [--version] [--mode flat|stereo|mono|cinema] [--data DIR] [--disc ISO-or-DIR]\n"
                    "          [--vblanks N] [--watchdog N] [--seconds S]\n"
                    "          [--novideo] [--hidden] [--verbose] [--profile]\n"
                    "          [--autoplay] [--selftest] [--gs-test] [--hle-test] [--spu2-test]\n"
@@ -533,6 +537,8 @@ int main(int argc, char **argv) {
                    "          [--capture FILE] [--capture-seconds S |"
                    " --capture-frames N]\n"
                    "          [--capture-level dma|gs] [--capture-at FIELD]\n"
+                   "  (no --data)   a player's start: the switches of the launcher scripts, the folder\n"
+                   "                beside the exe, [paths] disc of the settings file (docs/SETTINGS.md, Paths)\n"
                    "  --capture     where F6 writes; default out/capture.gscap\n"
                    "  --capture-*   length, level and an automatic start.\n"
                    "                level dma (default) replays the whole\n"
@@ -555,6 +561,7 @@ int main(int argc, char **argv) {
         extern int ps2_launcher_run(int hidden);
         if (ps2_launcher_run(want_hidden)) return 0;      /* its window was closed: nothing has started */
     }
+    if (!disc) disc = ps2_profile_disc();                 /* a player's start: [paths] disc =, or what the launcher just asked */
     {   const char *w = getenv("PS2_WATCH_MEM");
 #if !PS2_DIAG
         if (w)

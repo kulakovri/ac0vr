@@ -11,10 +11,12 @@
  * not the right one, 2 nothing readable (no drive, no disc, bad path, not an ISO). Build: any of the three bundled compilers,
  *   gcc -O2 -o disc_check.exe tools/setup/disc_check.c -lshell32
  * Self-test (fixtures only, no game data): python -I tools/setup/test_disc_check.py disc_check.exe
+ * ac0vr.exe calls disc_check_run() in-process and offers the same check as `ac0vr.exe --check-disc PATH` (the installer's disc page).
  */
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <shellapi.h>
+#include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -93,10 +95,24 @@ static void sha_hex(sha256_ctx *c, char out[65]) {
 }
 
 /* ---- paths and printing ---- */
+/* the words for the player: stdout on the command line, a buffer for disc_check_run */
+static char *say_buf;
+static size_t say_cap, say_len;
+
+static void say(const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    if (say_buf) {
+        int n = vsnprintf(say_buf + say_len, say_cap - say_len, fmt, ap);
+        if (n > 0) say_len += (size_t)n < say_cap - say_len ? (size_t)n : say_cap - say_len - 1;
+    } else vprintf(fmt, ap);
+    va_end(ap);
+}
+
 static void print_w(const wchar_t *w) {
     char b[3 * 1024];
     int n = WideCharToMultiByte(CP_UTF8, 0, w, -1, b, sizeof b, NULL, NULL);
-    fputs(n > 0 ? b : "?", stdout);
+    say("%s", n > 0 ? b : "?");
 }
 
 /* ---- a file on the disc, whichever way it is reached ---- */
@@ -104,11 +120,11 @@ typedef struct {
     FILE *iso;                  /* an ISO: the image, positioned by iso_start */
     wchar_t folder[1024];       /* else a folder or drive root */
     uint64_t iso_size;
-} disc;
+} disc_src;
 
 typedef struct { uint64_t offset, size; int found; } iso_entry;
 
-static int iso_read(disc *d, uint64_t off, void *buf, size_t n) {
+static int iso_read(disc_src *d, uint64_t off, void *buf, size_t n) {
     if (_fseeki64(d->iso, (long long)off, SEEK_SET)) return 0;
     return fread(buf, 1, n, d->iso) == n;
 }
@@ -116,7 +132,7 @@ static int iso_read(disc *d, uint64_t off, void *buf, size_t n) {
 static uint32_t le32(const unsigned char *p) { return (uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24; }
 
 /* a name in the root directory ("SYSTEM.CNF"), ISO9660: the ";1" version and case are ignored */
-static iso_entry iso_find(disc *d, uint64_t dir_off, uint64_t dir_size, const char *want) {
+static iso_entry iso_find(disc_src *d, uint64_t dir_off, uint64_t dir_size, const char *want) {
     iso_entry r = { 0, 0, 0 };
     size_t wl = strlen(want);
     unsigned char *buf;
@@ -149,7 +165,7 @@ static iso_entry iso_find(disc *d, uint64_t dir_off, uint64_t dir_size, const ch
 }
 
 /* reads up to cap bytes of a root file; returns 1 if found */
-static int disc_open_file(disc *d, const char *name, iso_entry *root, FILE **out, uint64_t *size, uint64_t *off) {
+static int disc_open_file(disc_src *d, const char *name, iso_entry *root, FILE **out, uint64_t *size, uint64_t *off) {
     if (d->iso) {
         iso_entry e = iso_find(d, root->offset, root->size, name);
         if (!e.found) return 0;
@@ -202,13 +218,13 @@ static const char *region_of(const char *serial) {
 enum { DC_OK = 0, DC_WRONG = 1, DC_NONE = 2 };
 
 static int say_none(const wchar_t *what, const char *why, const char *token) {
-    fputs("Nothing to check at ", stdout);
+    say("%s", "Nothing to check at ");
     print_w(what);
-    printf(": %s\nresult: none (%s)\n", why, token);
+    say(": %s\nresult: none (%s)\n", why, token);
     return DC_NONE;
 }
 
-static int check_disc(disc *d, const wchar_t *shown, const wchar_t *extract_to) {
+static int check_disc(disc_src *d, const wchar_t *shown, const wchar_t *extract_to) {
     iso_entry root = { 0, 0, 1 };
     char cnf[4096], serial[64], hex[65];
     FILE *f = NULL;
@@ -231,9 +247,9 @@ static int check_disc(disc *d, const wchar_t *shown, const wchar_t *extract_to) 
 
     rc = disc_open_file(d, "SYSTEM.CNF", &root, &f, &size, &off);
     if (rc <= 0) {
-        fputs("This is not a PlayStation 2 game: there is no SYSTEM.CNF on ", stdout);
+        say("%s", "This is not a PlayStation 2 game: there is no SYSTEM.CNF on ");
         print_w(shown);
-        printf(". The game needs your own US disc of Ace Combat Zero: The Belkan War, serial %s.\nresult: wrong (not_ps2)\n", WANT_SERIAL);
+        say(". The game needs your own US disc of Ace Combat Zero: The Belkan War, serial %s.\nresult: wrong (not_ps2)\n", WANT_SERIAL);
         return DC_WRONG;
     }
     {
@@ -246,14 +262,14 @@ static int check_disc(disc *d, const wchar_t *shown, const wchar_t *extract_to) 
         if (!d->iso) fclose(f);
     }
     if (!parse_serial(cnf, serial, sizeof serial)) {
-        fputs("This is not a PlayStation 2 game disc: SYSTEM.CNF on ", stdout);
+        say("%s", "This is not a PlayStation 2 game disc: SYSTEM.CNF on ");
         print_w(shown);
-        printf(" names no boot file. The game needs your own US disc, serial %s.\nresult: wrong (no_boot)\n", WANT_SERIAL);
+        say(" names no boot file. The game needs your own US disc, serial %s.\nresult: wrong (no_boot)\n", WANT_SERIAL);
         return DC_WRONG;
     }
     if (_stricmp(serial, WANT_SERIAL)) {
         const char *reg = region_of(serial);
-        printf("This disc is %s%s%s%s, not the US disc of Ace Combat Zero (%s). The recompiler is tied to that one executable, "
+        say("This disc is %s%s%s%s, not the US disc of Ace Combat Zero (%s). The recompiler is tied to that one executable, "
                "so another region of the game or another game cannot work.\nresult: wrong (serial %s)\n",
                serial, reg ? " (" : "", reg ? reg : "", reg ? " disc)" : "", WANT_SERIAL, serial);
         return DC_WRONG;
@@ -261,7 +277,7 @@ static int check_disc(disc *d, const wchar_t *shown, const wchar_t *extract_to) 
 
     rc = disc_open_file(d, WANT_SERIAL, &root, &f, &size, &off);
     if (rc <= 0) {
-        printf("SYSTEM.CNF names %s but that file is not there (or lies beyond the end of the image: an incomplete copy?).\n"
+        say("SYSTEM.CNF names %s but that file is not there (or lies beyond the end of the image: an incomplete copy?).\n"
                "result: wrong (no_executable)\n", WANT_SERIAL);
         return DC_WRONG;
     }
@@ -272,9 +288,9 @@ static int check_disc(disc *d, const wchar_t *shown, const wchar_t *extract_to) 
     if (extract_to) {
         out = _wfopen(extract_to, L"wb");
         if (!out) {
-            fputs("Cannot write ", stdout);
+            say("%s", "Cannot write ");
             print_w(extract_to);
-            printf(".\nresult: none (write_error)\n");
+            say(".\nresult: none (write_error)\n");
             if (!d->iso) fclose(f);
             return DC_NONE;
         }
@@ -296,21 +312,21 @@ static int check_disc(disc *d, const wchar_t *shown, const wchar_t *extract_to) 
     if (out) fclose(out);
     sha_hex(&sha, hex);
     if (strcmp(hex, WANT_SHA256)) {
-        printf("This disc says %s, but its executable is not the one the recompiler was made for: %llu bytes, SHA-256 %s "
+        say("This disc says %s, but its executable is not the one the recompiler was made for: %llu bytes, SHA-256 %s "
                "(expected %llu bytes, %s). It may be another printing of the disc, or a modified or damaged copy.\n"
                "result: wrong (hash %s)\n", WANT_SERIAL, (unsigned long long)size, hex, WANT_SIZE, WANT_SHA256, hex);
         if (out) _wremove(extract_to);
         return DC_WRONG;
     }
-    fputs("OK: ", stdout);
+    say("%s", "OK: ");
     print_w(shown);
-    printf(" is the US disc of Ace Combat Zero, %s, executable SHA-256 %s.\nresult: ok\n", WANT_SERIAL, hex);
+    say(" is the US disc of Ace Combat Zero, %s, executable SHA-256 %s.\nresult: ok\n", WANT_SERIAL, hex);
     return DC_OK;
 }
 
 static int check_path(const wchar_t *path, const wchar_t *extract_to) {
     DWORD a = GetFileAttributesW(path);
-    disc d;
+    disc_src d;
     wchar_t p[1024];
     int rc;
     size_t l;
@@ -348,16 +364,16 @@ static int check_drives(const wchar_t *extract_to) {
         wchar_t label[64];
         if (!(mask & (1u << i)) || GetDriveTypeW(root) != DRIVE_CDROM) continue;
         drives++;
-        fputs("Disc drive ", stdout);
+        say("%s", "Disc drive ");
         print_w(root);
-        fputs(": ", stdout);
+        say("%s", ": ");
         if (!GetVolumeInformationW(root, label, 64, NULL, NULL, NULL, NULL, 0)) {
-            printf("no disc, or a disc Windows cannot read.\n");
+            say("no disc, or a disc Windows cannot read.\n");
             continue;
         }
-        fputs("disc \"", stdout);
+        say("%s", "disc \"");
         print_w(label);
-        fputs("\".\n", stdout);
+        say("%s", "\".\n");
         {
             int rc = check_path(root, extract_to);
             if (rc == DC_OK) { SetErrorMode(old); return DC_OK; }
@@ -366,14 +382,26 @@ static int check_drives(const wchar_t *extract_to) {
     }
     SetErrorMode(old);
     if (!drives) {
-        printf("This PC has no disc drive that Windows can see. Give the path of an ISO image made from your own US disc instead: "
+        say("This PC has no disc drive that Windows can see. Give the path of an ISO image made from your own US disc instead: "
                "disc_check path\\to\\game.iso\nresult: none (no_drive)\n");
         return DC_NONE;
     }
-    if (best == DC_NONE) printf("No disc was found in the %d drive(s).\nresult: none (no_disc)\n", drives);
+    if (best == DC_NONE) say("No disc was found in the %d drive(s).\nresult: none (no_disc)\n", drives);
     return best;
 }
 
+/* In-process, for ac0vr.exe (tools/setup/ac0vr_launcher.c, built with DISC_CHECK_NO_MAIN): path NULL = every disc drive. The same words
+   go to msg, the last line `result: ...`; the return value is the exit status above. */
+int disc_check_run(const wchar_t *path, const wchar_t *extract_to, char *msg, size_t cap) {
+    int rc;
+    say_buf = msg; say_cap = cap; say_len = 0;
+    msg[0] = 0;
+    rc = path ? check_path(path, extract_to) : check_drives(extract_to);
+    say_buf = NULL;
+    return rc;
+}
+
+#ifndef DISC_CHECK_NO_MAIN
 int main(void) {
     int argc = 0, i, rc;
     wchar_t **argv = CommandLineToArgvW(GetCommandLineW(), &argc);
@@ -391,3 +419,4 @@ int main(void) {
     fflush(stdout);
     return rc;
 }
+#endif

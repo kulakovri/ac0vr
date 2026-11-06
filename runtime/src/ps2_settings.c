@@ -2491,7 +2491,7 @@ const char *ps2_enh_launcher_gpu_line(char *buf, int n) {
 const char *ps2_enh_launcher_blocked(int i) {
     if (i < 0 || i >= ENH_N || enh_rows[i].it.kind != K_PATHS) return NULL;
     const char *e = enh_cpit_keep[0] ? enh_cpit_keep[0] : getenv("ACZ_VR_COCKPIT_MODEL");
-    return e && *e && strcmp(e, "none") ? NULL : "This start has no 3D cockpit files (the word cockpit of play_zero_vr.sh).";
+    return e && *e && strcmp(e, "none") ? NULL : "This start has no 3D cockpit files (the cockpit set in cockpits/, or the word cockpit of play_zero_vr.sh).";
 }
 /* a choice, in memory; 1 changed, 0 the same, -1 held. A combo row through its members, the preset through its sub-table (the
    ini-only ladder rows too), a pad by its name: as ps2_enh_set, without the save and the restart it would ask for */
@@ -2608,6 +2608,23 @@ int ps2_enh_launcher_commit(void) {
     return changed;
 }
 
+/* [paths] and [update] are not the game's: the setup program writes them too (ps2_profile.c, tools/setup/ac0vr_launcher.c). A save keeps
+   them as they are, from the file on disk. */
+static void cfg_keep_foreign(FILE *out, const char *path) {
+    char line[2048];
+    int keep = 0;
+    FILE *in = fopen(path, "r");
+    if (!in) return;
+    while (fgets(line, sizeof line, in)) {
+        if (line[0] == '[') {
+            keep = !strncmp(line, "[paths]", 7) || !strncmp(line, "[update]", 8);
+            if (keep) fputc('\n', out);
+        }
+        if (keep && line[strspn(line, " \t\r\n")]) fputs(line, out);
+    }
+    fclose(in);
+}
+
 void ps2_settings_save(void) {
     char tmp[1100];
     const char *path;
@@ -2622,6 +2639,7 @@ void ps2_settings_save(void) {
     fprintf(f, "# Settings.\n"
                "# Written by the in-game menus (F4, ENHANCEMENTS).  Hand edits are kept as long as\n"
                "# each line stays key = value; unknown keys are ignored.\n");
+    cfg_keep_foreign(f, path);
     for (size_t i = 0; i < sizeof fields / sizeof fields[0]; i++) {
         const cfg_field *fd = &fields[i];
         char val[32];

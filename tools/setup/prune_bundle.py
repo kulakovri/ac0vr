@@ -15,20 +15,22 @@ keep = set()
 
 
 def add(path):
-    p = os.path.normcase(os.path.normpath(path))
+    p = os.path.normcase(os.path.abspath(path))
     if p.startswith(tc):
         keep.add(p)
 
 
-for d in glob.glob(os.path.join(out, "obj", "*.d")):
+for d in glob.glob(os.path.join(out, "build", "obj", "*.d")) + glob.glob(os.path.join(out, "obj", "*.d")):
     text = open(d, encoding="utf-8", errors="replace").read().replace("\\\n", " ")
     for tok in re.split(r"(?<!\\)\s+", text):
-        add(tok.replace("\\ ", " ").rstrip(":"))
+        tok = tok.replace("\\ ", " ").rstrip(":")
+        if tok:                                     # (player_build.py gives the compilers paths relative to its OUT)
+            add(os.path.join(out, tok))
 
-path_rx = re.compile(r"[A-Za-z]:[\\/][^\s()\"',]+")
+path_rx = re.compile(r"(?:[A-Za-z]:[\\/]|[.][.]?[\\/])[^\s()\"',]+|\S*toolchain[\\/][^\s()\"',]+")
 for line in open(trace, encoding="utf-8", errors="replace"):
     for m in path_rx.findall(line):
-        add(m)
+        add(os.path.join(out, m))
 
 removed = kept = 0
 freed = 0

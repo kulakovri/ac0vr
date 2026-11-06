@@ -603,7 +603,10 @@ int ps2_xr_pre_instance(const char ***exts, uint32_t *n) {
     if (xr_tag_delay < 0) xr_tag_delay = 0;
     if (xr_tag_delay > 15) xr_tag_delay = 15;
     const char *rt = getenv("PS2_XR_RUNTIME");
-    if (rt && *rt) SetEnvironmentVariableA("XR_RUNTIME_JSON", rt);
+    if (rt && *rt) {
+        wchar_t wrt[1100];
+        if (ps2_path_wide(rt, wrt, 1100)) SetEnvironmentVariableW(L"XR_RUNTIME_JSON", wrt);
+    }
     xscreen_w = envf("PS2_XR_SCREEN_W", 3.0f); xscreen_d = envf("PS2_XR_SCREEN_DIST", 2.5f);
     const char *want[12] = { XR_KHR_VULKAN_ENABLE_EXTENSION_NAME };
     uint32_t nwant = 1;

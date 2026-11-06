@@ -95,11 +95,14 @@ static void tp_cfg(void) {
         char pat[400], first[400];
         first[0] = 0;
 #ifdef _WIN32
-        WIN32_FIND_DATAA fd;
+        WIN32_FIND_DATAW fd;
+        wchar_t wpat[400];
+        char nm[260];
         snprintf(pat, sizeof pat, "%s/%s/t5_*.png", tp_dir, tp_name);
-        HANDLE fh = FindFirstFileA(pat, &fd);
+        HANDLE fh = ps2_path_wide(pat, wpat, 400) ? FindFirstFileW(wpat, &fd) : INVALID_HANDLE_VALUE;
         if (fh != INVALID_HANDLE_VALUE) {
-            snprintf(first, sizeof first, "%s/%s/%s", tp_dir, tp_name, fd.cFileName);
+            if (WideCharToMultiByte(CP_UTF8, 0, fd.cFileName, -1, nm, sizeof nm, NULL, NULL) > 0)
+                snprintf(first, sizeof first, "%s/%s/%s", tp_dir, tp_name, nm);
             FindClose(fh);
         }
 #else

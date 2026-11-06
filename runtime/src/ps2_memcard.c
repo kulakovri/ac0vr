@@ -78,7 +78,9 @@ static int commit(mc_card *c) {
 #endif
     if(fclose(f)) ok=0;
 #ifdef _WIN32
-    if(ok&&!MoveFileExA(temp,c->file,MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH)) ok=0;
+    wchar_t wtemp[1100],wfile[1100];
+    if(ok&&(!ps2_path_wide(temp,wtemp,1100)||!ps2_path_wide(c->file,wfile,1100))) ok=0;
+    if(ok&&!MoveFileExW(wtemp,wfile,MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH)) ok=0;
 #else
     if(ok&&rename(temp,c->file)) ok=0;
 #endif
@@ -95,7 +97,9 @@ static int load_card(int port) {
     snprintf(c->file,sizeof c->file,"%s/card%d.ps2mc",root,port);
     char lockpath[1060]; snprintf(lockpath,sizeof lockpath,"%s.lock",c->file);
 #ifdef _WIN32
-    HANDLE lock=CreateFileA(lockpath,GENERIC_READ|GENERIC_WRITE,0,NULL,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,NULL);
+    wchar_t wlock[1100];
+    if(!ps2_path_wide(lockpath,wlock,1100)) { c->failed=1; return -5; }
+    HANDLE lock=CreateFileW(wlock,GENERIC_READ|GENERIC_WRITE,0,NULL,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,NULL);
     if(lock==INVALID_HANDLE_VALUE) { c->failed=1; return -5; }
 #else
     int lock=open(lockpath,O_CREAT|O_RDWR,0600);

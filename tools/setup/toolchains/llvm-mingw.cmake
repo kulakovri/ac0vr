@@ -14,3 +14,4 @@ set(CMAKE_C_COMPILER "${TC_ROOT}/bin/x86_64-w64-mingw32-clang.exe" CACHE FILEPAT
 set(CMAKE_CXX_COMPILER "${TC_ROOT}/bin/x86_64-w64-mingw32-clang++.exe" CACHE FILEPATH "")
 set(CMAKE_AR "${TC_ROOT}/bin/llvm-ar.exe" CACHE FILEPATH "")
 set(CMAKE_RANLIB "${TC_ROOT}/bin/llvm-ranlib.exe" CACHE FILEPATH "")
+set(CMAKE_RC_COMPILER "${TC_ROOT}/bin/x86_64-w64-mingw32-windres.exe" CACHE FILEPATH "")

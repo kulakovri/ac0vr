@@ -126,6 +126,49 @@ The menu after a mission's end has a second way to restart (its other menu, id 1
 
 **The owner's scripts** set `ACZ_LAUNCHER=0` (D6 of the review): `play_zero_vr.sh`, `play_zero_desktop.sh`, `run_zero_mission.sh`, `run_zero_soak.sh`, `bench_flat.sh`, `sweep_missions.sh`, `run_test.sh`, `tools/scratch/run_cpit.sh`, `tools/scratch/run_mission_any.sh`. `tools/release/scrub_rules.txt` turns `play_zero_vr.sh`'s default to 1 in the public tree. **The restart prompt stays** (RESTART THE GAME TO APPLY / QUIT GAME NOW); after QUIT GAME NOW the next start lands on the launcher with the marks; the runtime never relaunches itself.
 
+## Paths: everything beside the exe
+
+One rule (setup_1105, 2026-11-05): a player's install is per user and writable, so what the game reads and writes lies next to `ac5.exe`:
+
+| What | Where, next to the exe |
+|---|---|
+| The settings | `ac5_settings.ini` (`PS2_SETTINGS_FILE` moves it) |
+| The memory cards | `saves/` (`PS2_SAVE_DIR`) |
+| The cockpit set | `cockpits/`, with `cockpits/map.txt`; `cockpits/env.txt`, when a set has one: `ACZ_...=value` lines, its per-model switches, each only when unset |
+| The upscaled movies, their decoder | `out/fmv/` (`ACZ_FMV_DIR`), `ffmpeg.exe` (`ACZ_FMV_FFMPEG`) |
+| The ground textures | `out/terrain_t5/` (`ACZ_TERRAIN_TEXPACK_DIR`) |
+| The generated code and the image | `gen_zero/` (`--data` moves it) |
+| Crash reports | `crash/`, else `%TEMP%\ac5_crash` |
+| The log | `logs/zero_play_<stamp>.log`, the 8 newest kept, when no script redirects stdout |
+| The shaders, the pipeline cache | `shaders/`, `ac5_pipelines.cache`, `ac5_pipelines.keys` |
+| The texture glyphs and packs, the joystick profiles | `textures/`, `profiles/joystick/` |
+
+**An asset folder.** A folder `ac0vr-assets` beside the setup exe, laid out like this table, is copied in by the setup: only newer files on an install over an install. With its ground textures the row GROUND TEXTURES starts at `x4` (a value already in the settings file stays). The uninstaller's second question decides about these files. Without the folder the game runs on what the setup holds. The upscaled movies need no NVIDIA card: when ffmpeg stops before the first frame with `ACZ_FMV_HWACCEL`'s decoder, the CPU decodes them from then on.
+
+**The home folder.** A player's start makes the exe's folder the current folder, so the relative paths above just work. The one exception is a developer's build: when there is no `gen_zero/ps2_image.bin` beside the exe but there is one two folders up (`build/zero/ac5.exe` in a source tree), the tree's root is the home folder, and `saves/`, `cockpits/` and `logs/` lie there, as with the scripts. The log's second line names it.
+
+**The disc.** `[paths] disc =` in the settings file: an ISO image or a folder with the disc's files. The setup program writes it (the installer's disc page, `ac0vr.exe`'s picker). When it is not set, or the file is gone, the launcher asks again (its two buttons, ISO IMAGE and DISC FOLDER; PLAY waits; also with `launcher = 0`), and a `--disc` on the command line wins for that start. `[paths] xr_runtime =` names an OpenXR runtime's json without a shell, for Virtual Desktop or SteamVR on a PC that also has Meta's app; the default is below. A save keeps the sections `[paths]` and `[update]` as they are: the setup program owns them too. A value runs to the line's end, so a folder name may hold `;` and `#`.
+
+**Names outside ASCII.** Every path in the runtime is UTF-8, whatever the Windows code page is: `runtime/include/ps2_path.h` is forced into the runtime's C files and routes `fopen`, `remove`, `rename`, `_stat64`, `_mkdir` and `opendir` through `ps2_path.c`'s `_wfopen` and friends; the arguments come from `CommandLineToArgvW`, and `ACZ_*` / `PS2_*` values outside ASCII are converted at the start. SDL's file functions, the OpenXR loader and the crash report were wide or UTF-8 before. A name that is pure ASCII takes the C library's own function, as before. Tested in a folder `тест ÄÖ` on code page 1252: the settings, the shaders, the pipeline cache, the log, the disc through a folder with such a name, an absolute `PS2_SAVE_DIR`.
+
+**Who started me.** `--data` on the command line means a script: every script of this tree passes it, and nothing below happens, so their runs are as they were but for the log's first line. So does any option but `--mode`, `--disc`, `--watchdog`, `--hidden` and `--verbose` (a self-test, `--novideo`, `--capture`...). Everything else is a player's start. `ACZ_PROFILE=script` or `=player` overrides this. `ac5.exe --version` prints the version and exits, whatever else is on the line.
+
+**A player's start** does what `play_zero_vr.sh sharp native cockpit smooth modern` does: `runtime/src/ps2_profile.c`, a constructor that runs before the settings file is read. Each entry applies only when the variable is not set. A console that nobody else shares goes away. The watchdog is off, as the script's `--watchdog 0`.
+
+| Variable | Value | `--mode` |
+|---|---|---|
+| `ACZ_MENU_SETTINGS` | `1` | all |
+| `SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS` | `1` | all |
+| `PS2_RN_VP` | `1` | all |
+| `ACZ_VR_COCKPIT_MODEL`, `ACZ_VR_COCKPIT_MODELS` | `cockpits/f5e_t38.cpit` when it is there (else the map's first file), the map from `cockpits/map.txt` | all |
+| `PS2_XR`, `PS2_FIELD_HZ` | `1`, `60` | not flat |
+| `PS2_XR_MODE` | `stereo` / `mono` / `cinema` | sharp (the default) and stereo / mono / cinema |
+| `ACZ_VR_HEADLOOK`, `PS2_XR_MULTIVIEW` | `stick`, `1` | sharp |
+| `PS2_UPSCALE` | `3` | not sharp (sharp: the row RESOLUTION) |
+| `PS2_XR_RUNTIME` | `[paths] xr_runtime`, else Meta's json when it is installed, else unset (the system's active runtime). Nothing when `XR_RUNTIME_JSON` is set | not flat |
+
+Three words of that command are not in the table, because a saved row owns each of them and an exported switch would lock the row for the player: SMOOTH MOTION (`PS2_XR_RERENDER`, default 1), CONTROLLER LAYOUT (`ACZ_PAD_LAYOUT`, default modern with `ACZ_MENU_SETTINGS`) and the launcher (`ACZ_LAUNCHER`; the file's `launcher`, default 1, whose checkbox would be dead). On a new settings file they come out the same as the words.
+
 ## The page: every row
 
 settings: loaded out\settings_test\md.ini
@@ -255,6 +298,24 @@ settings: controller layout modern ( RT/LT = R1/L1 analog throttle, RB/LB = R2/L
 | PILOT HANDS | `pilot_hands` | `ACZ_VR_HANDS` | next mission | AUTO | AUTO / ON / OFF |
 | SHOW TOUCH CONTROLS | `touch_card` | - | action | - | PRESS A |
 
+## Updates
+
+`tools/setup/ac0vr_update.c` (setup_1105), part of `ac0vr.exe`. At start, and from its CHECK FOR UPDATES button, it asks GitHub's API for the public repository's latest release, through WinHTTP, 3 seconds in all. Offline, rate-limited or no release yet: silent, the game starts. A `tag_name` newer than `version.txt` opens the window with UPDATE, the release's name and the first lines of its notes; the game can also be started as it is.
+
+| Switch | Default | Meaning |
+|---|---|---|
+| `[update] check` in the settings file | `1` | `0`: no question at start; the button still asks. The game keeps this section as it is |
+| `ACZ_UPDATE_CHECK` | unset | `0` / `1` wins over the file |
+| `ACZ_UPDATE_URL` | that address | another JSON of the same shape; `file:///` works for it and for its assets (the tests) |
+
+**The update.** `ac0vr-<version>-update.zip` and `SHA256SUMS` from the release's assets go to `staging.dl/`; the zip's hash must be in `SHA256SUMS` (a damaged download is refused and nothing changes; the hash comes from the same place as the zip, so it is no signature). It is unpacked into `staging/` (miniz, `third_party/miniz`; a name that leaves the folder is refused), and only then swapped into place: first what the zip's folders no longer hold goes away, then each file that differs moves in, so a file that stays keeps its date for the compile stage and the pipeline cache; `version.txt` last. `ac0vr.exe` replaces itself through a renamed `ac0vr.exe.old`, removed at the next start. Then the first-run build with its cache: a runtime-only release relinks in seconds, a recompiler release rebuilds. Progress and the result are in the same window.
+
+**What can fail.** Nothing under `build/zero/` changes before the new exe is linked, so a failed download, a damaged zip, a full disk or a failed build leaves the previous build runnable (the window offers it). Its log still says the old version: `version.txt` beside the exe moves with the link.
+
+**The compiler** comes only when `toolchain_id` in `bundle.txt` changes: then the asset `ac0vr-toolchain-<id>.zip` (`ACZ_RELEASE_TOOLCHAIN_ASSET=1` for `make_release.sh`) is fetched and verified too. Python stays as installed.
+
+**A release** (the owner's: the web page; no token is stored anywhere): tag `vX.Y.Z`, the notes from `RELEASE_NOTES.md`, the assets `ac0vr-X.Y.Z-setup.exe`, `ac0vr-X.Y.Z-update.zip`, `SHA256SUMS`.
+
 ## The one reset
 
 QUALITY > RESET ALL TO DEFAULTS, F4 > Quick's button and F4 > Enhancements' button call the same function, `ps2_enh_reset_all`: every row of the page and all of `ps2_cfg` (graphics, display, key and pad bindings, dead zones); the TOUCH CONTROLS card's "seen" flag stays.
@@ -297,6 +358,30 @@ On no in-game page; F4 > Enhancements > Expert (ini) lists them; `internal_resol
 | EE IDLE WAIT | `ee_idle` | `PS2_PERF_EE_IDLE` | next start | OFF | ON / OFF |
 | TWO-STAGE GRAPHICS | `gfx_split` | `PS2_GFX_SPLIT` | next start | OFF | ON / OFF |
 | DEPTH TO THE HEADSET | `xr_depth` | `PS2_XR_DEPTH` | next start | OFF | ON / OFF |
+
+## The first run: ac0vr.exe
+
+`tools/setup/ac0vr_launcher.c` (setup_1105), the player's entry point and the shortcut's target: Win32 only, no SDL, no game code, built by CMake (target `ac0vr`) and shipped prebuilt. It looks at `build/zero/ac5.exe` beside it and `build_state.json`. When the game is built for the installed release (`version.txt`) and the disc is there, it starts `ac5.exe` and exits. Otherwise a small window: the disc (a picker for an ISO or a folder; `tools/setup/disc_check.c` in-process: the serial and the executable's SHA-256, the US disc only; a wrong disc is refused with the message), then "Build the game from your disc" with a bar, the stage's name and the time left (the stages' measured times are in `bundle/bundle.txt`), running `python\python.exe -I -B tools\setup\player_build.py` through a pipe. On success the game starts. On failure the window shows the last 30 lines, `build/player_build.log` stays, and a previous build can still be started. Cancel kills the build's processes; what was compiled stays for the next try.
+
+| Command line | What it does |
+|---|---|
+| `ac0vr.exe --dialog` | the window even when nothing is needed: another disc, a rebuild, updates |
+| `ac0vr.exe --check-disc PATH [--out FILE]` | the check only: exit 0 ok, 1 wrong, 2 nothing readable; the words into FILE. The installer's disc page |
+| `ac0vr.exe --set-disc PATH` | the check, then `[paths] disc =` in `build/zero/ac5_settings.ini` |
+| `--auto`, `--no-start`, `--hidden`, `-- ARGS` | [test] no clicks; no game at the end; no window; arguments for the game |
+
+**The cache** (`tools/setup/player_build.py`, `build_state.json`): per stage a hash of its inputs; a rerun does only the stages whose inputs changed.
+
+| Stage | Inputs | Output | Time here, 24 threads |
+|---|---|---|---|
+| recompile | the ELF, `bundle/recomp/` (the recompilers, the config) | `build/zero/gen_zero/`; a file that comes out the same keeps its date | 10 s |
+| compile | `gen_zero/`, `ps2_vu.c`, the runtime headers they really use (from the `.d` files), the toolchain's identity and flags | `build/obj/` | 42 s |
+| link | the objects, `libac5rt.a`, the SDK's import libraries | `build/zero/ac5.new.exe`, swapped at the end | 0.3 s |
+| install, always | | the DLLs, the shaders, `data/`, `version.txt` next to the exe, only files that changed | 0.1 s |
+
+**The folder of an install.** `ac0vr.exe`, `version.txt`, `build_state.json`; `bundle/` (the compiler, the runtime library, the SDK, the shaders, the DLLs, the recompiler, the data), `python/`, `tools/setup/`, `docs/`, `licenses/`; `build/obj/` and `build/zero/`, the game and everything of "Paths" above. All paths the compilers see are relative to the install, so a folder outside the Windows code page does not matter to them.
+
+**The release** (`tools/setup/make_release.sh VERSION`, on the developer's machine): `out/release/<version>/stage/` is the install image, then the installer, the update zip, `SHA256SUMS`, a `RELEASE_NOTES.md` skeleton. It refuses to finish on any hit of `tools/setup/release_scan.py`: names (`SLUS`, `ps2_image.bin`, `gen_zero/`, `.cpit`, `.iso`, memory cards, the textures made from the disc's pictures), machine paths, and, with the developer's own ELF, 96 pieces of the game's bytes searched in every file.
 
 ## The combo rows: what each choice sets
 

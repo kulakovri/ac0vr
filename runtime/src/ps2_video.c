@@ -3847,10 +3847,10 @@ static u64 pipe_spv_set_stamp(int *nfiles) {
     closedir(d);
     qsort(names, (size_t)n, sizeof names[0], pipe_name_cmp);
     for (int i = 0; i < n; i++) {
-        struct stat st;
+        struct _stat64 st;                       /* (ps2_path.h: the folder may be outside the code page) */
         snprintf(path, sizeof path, "%s/%s", dir, names[i]);
         h = fnv64(h, names[i], strlen(names[i]) + 1u);
-        if (stat(path, &st) == 0) {
+        if (_stat64(path, &st) == 0) {
             u64 sz = (u64)st.st_size, mt = (u64)st.st_mtime;
             h = fnv64(h, &sz, sizeof sz);
             h = fnv64(h, &mt, sizeof mt);

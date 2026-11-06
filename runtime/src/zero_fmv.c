@@ -427,7 +427,7 @@ static void fm_init(void) {
     if (e && *e) fm_tv = atoi(e) != 0;
     for (int i = 0; i < FM_PACS; i++) snprintf(fm_tv_pac[i], sizeof fm_tv_pac[i], "%.63s-tv", fm_pac_model[i]);
     snprintf(fm_tv_model, sizeof fm_tv_model, "%.63s-tv", fm_model);
-    e = getenv("ACZ_FMV_HWACCEL");       /* cuda (default), d3d11va, auto, none */
+    e = getenv("ACZ_FMV_HWACCEL");       /* cuda (default; ffmpeg failing with it: none from then on), d3d11va, auto, none */
     if (e && *e) snprintf(fm_hw, sizeof fm_hw, "%s", e);
     e = getenv("ACZ_FMV_DIR");
     if (e && *e) snprintf(fm_dir, sizeof fm_dir, "%s", e);
@@ -444,6 +444,8 @@ static void fm_init(void) {
         const char *base = SDL_GetBasePath();
         snprintf(fm_ffmpeg, sizeof fm_ffmpeg, "../%s", rel);
         if (!file_size_ok(fm_ffmpeg, NULL)) snprintf(fm_ffmpeg, sizeof fm_ffmpeg, "%s../../../%s", base ? base : "", rel);
+        /* a player's install: the asset folder puts it beside the exe */
+        if (!file_size_ok(fm_ffmpeg, NULL) && file_size_ok("ffmpeg.exe", NULL)) snprintf(fm_ffmpeg, sizeof fm_ffmpeg, "ffmpeg.exe");
     }
     posix_to_win(fm_ffmpeg);
     if (!fm_on) { ps2_log("fmv: upscaled movies off (ACZ_FMV_PACK=0)"); return; }
@@ -648,6 +650,20 @@ static fm_slot *slot_for_write(s32 need_lo) {
     return best;
 }
 
+/* the pipe from ffmpeg ended: its exit code. Not one frame yet (`first`) with a hardware decoder: a PC without that GPU, where ffmpeg stops at once. The CPU decodes from here on */
+static DWORD dec_ended(int first) {
+    DWORD code = 0;
+    if (dec_proc) { WaitForSingleObject(dec_proc, 500); GetExitCodeProcess(dec_proc, &code); }
+    if (code != 0 && first && *fm_hw && strcmp(fm_hw, "none")) {
+        ps2_log("fmv: ffmpeg stopped before the first frame with hwaccel %s (exit code %lu): the CPU decodes the movies", fm_hw, (unsigned long)code);
+        snprintf(fm_hw, sizeof fm_hw, "none");
+        pthread_mutex_lock(&fm_mx);
+        job_gen++;
+        pthread_mutex_unlock(&fm_mx);
+    }
+    return code;
+}
+
 static void *dec_main(void *arg) {
     u8 *nv = NULL;
     size_t nv_bytes = 0;
@@ -745,7 +761,7 @@ static void *dec_main(void *arg) {
         }
         if (act == 3) {
             pthread_mutex_unlock(&fm_mx);
-            if (!read_full(pipe, nv, nv_bytes)) { eof = 1; continue; }
+            if (!read_full(pipe, nv, nv_bytes)) { eof = 1; dec_ended(next == start); continue; }
             next++;
             st.frames_drop++;
             continue;
@@ -758,13 +774,13 @@ static void *dec_main(void *arg) {
         {
             u64 t0 = SDL_GetTicksNS(), t1;
             if (!read_full(pipe, nv, nv_bytes)) {
-                DWORD code = 0;
+                DWORD code;
                 pthread_mutex_lock(&fm_mx);
                 s->state = 0;
                 eof = 1;
                 pthread_mutex_unlock(&fm_mx);
                 /* ffmpeg's own end (exit code 0) is the file's end; anything else (killed with the game) is not */
-                if (dec_proc) { WaitForSingleObject(dec_proc, 500); GetExitCodeProcess(dec_proc, &code); }
+                code = dec_ended(next == start);
                 if (code != 0) {
                     if (fm_dbg) ps2_log("fmv: %s movie %d: ffmpeg stopped (exit code %lu) at frame %d", pacs[pac].name,
                                         movie, (unsigned long)code, (int)next);

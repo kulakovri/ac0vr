@@ -45,12 +45,14 @@ llvm-mingw)
     cp "${ACZ_TC_CMAKE_BIN:?a folder with ninja.exe}/ninja.exe" "$out/toolchain/bin/"
     cat > "$out/bundle.txt" <<EOT
 kind=llvm-mingw
+toolchain_id=$(basename "$root")
 bindir=bin
 cc=$T-clang.exe
 cxx=$T-clang++.exe
 ninja=ninja.exe
 cflags=-D_WIN32_WINNT=0x0A00
 ldflags=-Wl,--stack,2097152
+gen_opt=-O2
 EOT
     ;;
 zig)
@@ -106,14 +108,18 @@ cp runtime/include/*.h "$out/runtime/include/"
 mkdir -p "$out/recomp/ps2recomp" "$out/recomp/vurecomp"
 cp tools/ps2recomp/*.py "$out/recomp/ps2recomp/"
 cp tools/vurecomp/*.py "$out/recomp/vurecomp/"
-cp tools/setup/vu_images_from_elf.py tools/setup/player_build.py "$out/recomp/"
+cp tools/setup/vu_images_from_elf.py "$out/recomp/"
 cp config_zero/ida_like_zero.json config_zero/seeds_zero.json "$out/recomp/config_zero/"
 cp config_zero/sdk/sdk_symbols.json config_zero/sdk/manual_symbols.json config_zero/sdk/overrides_draft.json "$out/recomp/config_zero/sdk/"
-cp "${ACZ_VU_RECIPE:?the recipe from vu_images_from_elf.py make}" "$out/recomp/vu_recipe.json"
+cp "${ACZ_VU_RECIPE:-config_zero/vu_recipe.json}" "$out/recomp/vu_recipe.json"
 
-mkdir -p "$out/data/config"
-cp -r textures "$out/data/"
-cp config/game_symbols.txt config/pac_names.txt "$out/data/config/"
+# what the game reads beside the exe: only what the public tree may carry (tools/release/public_manifest.txt: the glyphs of our own, not the
+# textures made from the disc's pictures); data/ lands next to the exe
+mkdir -p "$out/data/config_zero" "$out/data/textures" "$out/data/profiles"
+for d in xbox xbox_modern; do cp -r "textures/$d" "$out/data/textures/"; done
+rm -f "$out"/data/textures/*/3F861D67_*
+cp config_zero/cloud_art.json "$out/data/config_zero/"
+cp -r profiles/joystick "$out/data/profiles/"
 cp "$sdk"/dll/*.dll "$out/dll/"
 cp "$sdk"/spirv/*.spv "$out/spirv/"
 du -sh "$out"/* "$out/toolchain"/*

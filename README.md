@@ -1,6 +1,6 @@
 # ac0vr
 
-**Version 0.1.0, an early build.** Tested on one PC and one headset so far; the installer and the in-game updater are the next step. Everything below is the source route.
+**Version 0.1.0, an early build.** Tested on one PC and one headset so far. To play, see Install below; Build is the source route.
 
 A native PC recompilation of **Ace Combat Zero: The Belkan War** (PlayStation 2, US release, SLUS-21346) with virtual reality: you sit in a 3D
 cockpit and look around with your head. The game's code is translated to C ahead of time on your own machine and compiled together with
@@ -8,7 +8,7 @@ a runtime that stands in for the console (graphics through Vulkan, the vector un
 controllers). No emulator runs while you play.
 
 **This repository holds no game.** No code, data, pictures, sound or movies of the game, no SDK files, no prebuilt program. You need your
-own disc: the recompiler reads the executable on it, and the game loads everything else from it while you play. This is a free
+own disc: the recompiler reads the executable on it, and the game loads everything else from it while you play. The installer holds no game either: it builds the game on your PC from your disc. This is a free
 fan project, not affiliated with or endorsed by Bandai Namco Entertainment or Sony Interactive Entertainment. It unlocks nothing and sells
 nothing.
 
@@ -28,7 +28,7 @@ nothing.
 - **A PC VR headset through OpenXR.** A Meta Quest over Link, Air Link or Virtual Desktop, or any other headset with an OpenXR runtime. Without a headset the
   game runs in a window. See "Tested on" below.
 - **A strong GPU with a Vulkan driver.** All numbers so far come from an RTX 3090 Ti, and the default look uses most of it.
-- **Tools, all free:** [MSYS2](https://www.msys2.org) for the compiler, the libraries and Python, Git Bash or the MSYS2 shell. Disk: about 200 MB for the build, plus the disc image and the cockpits.
+- **For the source route only, all free:** [MSYS2](https://www.msys2.org) for the compiler, the libraries and Python, Git Bash or the MSYS2 shell. Disk: about 200 MB for the build, plus the disc image and the cockpits.
 
 In the MSYS2 UCRT64 shell:
 
@@ -44,6 +44,22 @@ in Git Bash after this line (change it if MSYS2 is not in `C:\msys64`):
 ```
 export PATH=/c/msys64/ucrt64/bin:/c/msys64/usr/bin:$PATH
 ```
+
+## Install
+
+**The way to play.** Download `ac0vr-0.1.0-setup.exe` from this repository's Releases and put it next to an ISO image of your own US disc (or tell it where the image or a folder with the disc's files is).
+
+1. **Windows may stop it:** the setup is not signed yet, so SmartScreen shows "Windows protected your PC". Click *More info*, then *Run anyway*.
+2. **The wizard:** the folder (`%LOCALAPPDATA%\Programs\ac0vr`, for your user only, no administrator rights), your disc (an image beside the setup is found by itself; the check reads the serial and a hash of the executable, and only the US disc passes), a desktop shortcut.
+3. **The first start** builds the game from your disc, in a window with a progress bar: a minute or two on 8 threads, and only once. The result stays on your PC and the disc stays where it is: it is read while you play, never copied.
+
+The setup holds no assets. If you have a folder `ac0vr-assets`, keep it next to the setup and the wizard copies it in; without one the game runs from the HUD view, with the original movies and ground textures.
+
+After that the shortcut starts the game at once; there is no Bash, MSYS2 or emulator to deal with. Your saves, your settings and the log are in `build\zero\` of the install folder (`saves\`, `ac5_settings.ini`, `logs\`), and the uninstaller asks before it touches them.
+
+**Updates.** At each start `ac0vr.exe` asks GitHub for the latest release (3 seconds at most; offline it just starts the game) and offers an update, with its notes. It is a small download, checked against `SHA256SUMS`, and usually a relink of a few seconds. `[update] check = 0` in `ac5_settings.ini` turns the question off. The Start menu's *ac0vr: another disc, a rebuild, updates* opens the same window by hand.
+
+Everything from here on is the source route: for working on the code, not for playing.
 
 ## Build
 

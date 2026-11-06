@@ -1,5 +1,6 @@
 /* The launcher (menu_1105c, the settings review of 2026-11-05; docs/SETTINGS.md layer 1): the QUALITY rows, the GPU line, ACTIVE
-   CONTROLLER and PLAY, in the game's window, before anything of the engine exists.
+   CONTROLLER and PLAY, in the game's window, before anything of the engine exists. On a player's start (ps2_profile.c) whose
+   [paths] disc = is not set or is gone it also asks for the disc (setup_1105), and PLAY waits for one.
 
    Why it comes first. The QUALITY rows are environment switches and their readers run at or before the creation of what they
    configure: main()'s zero_*_init, vk_init (PS2_UPSCALE, ACZ_VR_CLOUDS), the renderer's edge_aa_init, cpit_load, lw_init. So
@@ -17,6 +18,7 @@
    If anything of this fails (no window, no Vulkan 1.3 device) the launcher says so and the game starts without it. */
 #include "ps2_settings.h"
 #include "ps2_hotas.h"
+#include "ps2_profile.h"
 
 #include "imgui.h"
 #include "imgui_impl_sdl3.h"
@@ -583,6 +585,50 @@ void draw_rows() {
     }
 }
 
+/* ---- the disc, when a player's start has none (setup_1105): SDL's own file dialogs; their callback comes on another thread ---- */
+char disc_msg[160];
+pthread_mutex_t disc_m = PTHREAD_MUTEX_INITIALIZER;
+char disc_pick[1200];
+bool disc_open;
+
+void SDLCALL disc_chosen(void *, const char *const *list, int) {
+    pthread_mutex_lock(&disc_m);
+    if (list && list[0]) snprintf(disc_pick, sizeof disc_pick, "%s", list[0]);
+    disc_open = false;
+    pthread_mutex_unlock(&disc_m);
+}
+void disc_take() {
+    char p[1200];
+    pthread_mutex_lock(&disc_m);
+    snprintf(p, sizeof p, "%s", disc_pick);
+    disc_pick[0] = 0;
+    pthread_mutex_unlock(&disc_m);
+    if (!p[0]) return;
+    const char *why = ps2_profile_disc_set(p);
+    snprintf(disc_msg, sizeof disc_msg, "%s", why ? why : "");
+    if (why) ps2_log("launcher: disc refused: %s (%s)", p, why);
+}
+void draw_disc() {
+    static const SDL_DialogFileFilter iso = { "Disc image (*.iso)", "iso" };
+    ImGui::TextColored(WARN, "Where is your disc? The US disc of the game, as an ISO image or a folder with its files.");
+    if (disc_msg[0]) ImGui::TextColored(WARN, "%s", disc_msg);
+    pthread_mutex_lock(&disc_m);
+    bool busy = disc_open;
+    pthread_mutex_unlock(&disc_m);
+    if (busy) ImGui::BeginDisabled();
+    if (ImGui::Button("ISO IMAGE...")) {
+        disc_open = true;
+        SDL_ShowOpenFileDialog(disc_chosen, nullptr, L.win, &iso, 1, nullptr, false);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("DISC FOLDER...")) {
+        disc_open = true;
+        SDL_ShowOpenFolderDialog(disc_chosen, nullptr, L.win, nullptr, false);
+    }
+    if (busy) ImGui::EndDisabled();
+    ImGui::Separator();
+}
+
 void draw_page() {
     /* a panel in the middle of the window, as wide as about 72 letters, as high as it has rows (the last frame's height) */
     static float last_h;
@@ -599,6 +645,8 @@ void draw_page() {
     ImGui::Separator();
     ImGui::TextWrapped("%s", U.gpu);
     ImGui::Spacing();
+    const bool no_disc = ps2_profile_disc_wanted();
+    if (no_disc) draw_disc();
     draw_rows();
     {   ImVec2 p0 = ImGui::GetCursorScreenPos();
         bool hide = U.hide;
@@ -629,13 +677,22 @@ void draw_page() {
     if (U.others[0]) ImGui::TextColored(WARN, "Also changed last time, in effect from now on: %s.", U.others);
     ImGui::Spacing();
     const float h = ImGui::GetFrameHeight() * 2.0f;
-    if (ImGui::Button("PLAY", ImVec2(-FLT_MIN, h))) { U.play = true; U.how = "mouse"; }
+    if (no_disc) ImGui::BeginDisabled();
+    if (ImGui::Button(no_disc ? "PLAY (the game needs your disc)" : "PLAY", ImVec2(-FLT_MIN, h))) { U.play = true; U.how = "mouse"; }
+    if (no_disc) ImGui::EndDisabled();
     U.r_play[0] = ImGui::GetItemRectMin();
     U.r_play[1] = ImGui::GetItemRectMax();
     ImGui::TextDisabled("Up / Down: a row.  Left / Right: its value.  PLAY: Enter, Space, a pad's A or Cross, the mouse.");
     ImGui::TextDisabled("Close the window to quit; the choices made here are saved by PLAY.");
     last_h = ImGui::GetCursorPosY() + ImGui::GetStyle().WindowPadding.y;
     ImGui::End();
+    {   /* the version, in the window's corner */
+        char v[120];
+        snprintf(v, sizeof v, "version %s", ps2_version_line());
+        const ImVec2 sz = ImGui::CalcTextSize(v);
+        ImGui::GetForegroundDrawList()->AddText(ImVec2(vp->Pos.x + vp->Size.x - sz.x - 8.0f, vp->Pos.y + vp->Size.y - sz.y - 6.0f),
+                                                ImGui::GetColorU32(ImGuiCol_TextDisabled), v);
+    }
 }
 
 void event(const SDL_Event &e, double since) {
@@ -806,6 +863,12 @@ int launcher_body() {
         SDL_Event e;
         test_step(frame);
         while (SDL_PollEvent(&e)) event(e, since);
+        disc_take();
+        if (frame == 2) {                               /* [test] as if the dialog had given this path */
+            const char *dt = getenv("ACZ_LAUNCHER_DISC_TEST");
+            if (dt && *dt && ps2_profile_disc_wanted()) { snprintf(disc_pick, sizeof disc_pick, "%s", dt); disc_take(); }
+        }
+        if (U.play && ps2_profile_disc_wanted()) U.play = false;    /* (Enter, Space, a pad's A: PLAY waits for the disc) */
         if (U.quit || U.play) break;
         if (L.autoplay >= 0.0 && since >= L.autoplay) { U.play = true; U.how = "ACZ_LAUNCHER_AUTOPLAY"; break; }
         if (SDL_GetWindowFlags(L.win) & SDL_WINDOW_MINIMIZED) { SDL_WaitEventTimeout(nullptr, 100); continue; }
@@ -963,7 +1026,9 @@ void *launcher_thread(void *) {
 
 /* main(), right after the arguments: 0 = go on (the launcher was off, failed or PLAY was pressed), 1 = the window was closed: quit */
 extern "C" int ps2_launcher_run(int hidden) {
-    if (!ps2_enh_launcher_wanted()) return 0;
+    /* the file's `launcher = 0` ("do not show again") still asks for a disc that is gone; ACZ_LAUNCHER=0 never shows it */
+    const char *off = getenv("ACZ_LAUNCHER");
+    if (!ps2_enh_launcher_wanted() && !(ps2_profile_disc_wanted() && !(off && *off == '0'))) return 0;
     const char *why = !ps2_enh_applied() ? "ACZ_MENU_SETTINGS is not 1, its rows would not apply" : nullptr;
     const char *ap = getenv("ACZ_LAUNCHER_AUTOPLAY"), *ts = getenv("ACZ_LAUNCHER_TEST");
     L.autoplay = ap && *ap ? atof(ap) : -1.0;

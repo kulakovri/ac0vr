@@ -413,6 +413,10 @@ static void usage(const char *argv0) {
     argv0);
 }
 
+/* the launcher is linked in with the runtime, never run here; gsreplay has no player's start (ps2_profile.c is ac5's) */
+int ps2_profile_disc_wanted(void) { return 0; }
+const char *ps2_profile_disc_set(const char *path) { (void)path; return ""; }
+
 int main(int argc, char **argv) {
     const char *path = "out/capture.gscap";
     const char *shot = "ps2_replay.ppm";

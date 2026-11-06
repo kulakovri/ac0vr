@@ -1,0 +1,42 @@
+# write_version.cmake -- ps2_version.h in the build folder, at every build, written only when it changed (runtime/src/ps2_version.c,
+# the one file that includes it). cmake -DSRC=<tree> -DOUT=<file> [-DACZ_VERSION=0.1.0] [-DACZ_VERSION_GIT=ec0b1df] -P write_version.cmake
+# The version: ACZ_VERSION, else `git describe --tags --always --dirty` when it starts with a tag (v0.1.0 -> 0.1.0), else 0.1.0-dev.
+# Only a git repository whose top is this very tree counts: a copy of the tree inside another repository has no version of its own.
+set(ver "${ACZ_VERSION}")
+set(rev "${ACZ_VERSION_GIT}")
+set(ENV{GIT_OPTIONAL_LOCKS} 0)                   # (a build next to a commit must not touch the index)
+find_program(GIT_EXE git)
+if(GIT_EXE)
+  execute_process(COMMAND "${GIT_EXE}" rev-parse --show-toplevel WORKING_DIRECTORY "${SRC}"
+                  OUTPUT_VARIABLE top RESULT_VARIABLE rc ERROR_QUIET OUTPUT_STRIP_TRAILING_WHITESPACE)
+  if(rc EQUAL 0)
+    get_filename_component(top_real "${top}" REALPATH)
+    get_filename_component(src_real "${SRC}" REALPATH)
+    if(top_real STREQUAL src_real)
+      execute_process(COMMAND "${GIT_EXE}" describe --tags --always --dirty WORKING_DIRECTORY "${SRC}"
+                      OUTPUT_VARIABLE desc ERROR_QUIET OUTPUT_STRIP_TRAILING_WHITESPACE)
+      execute_process(COMMAND "${GIT_EXE}" rev-parse --short HEAD WORKING_DIRECTORY "${SRC}"
+                      OUTPUT_VARIABLE head ERROR_QUIET OUTPUT_STRIP_TRAILING_WHITESPACE)
+      if(NOT rev)
+        set(rev "${head}")
+        if(desc MATCHES "-dirty$")
+          set(rev "${rev}-dirty")
+        endif()
+      endif()
+      if(NOT ver AND desc MATCHES "^v?[0-9]+\\.[0-9]+")
+        string(REGEX REPLACE "^v" "" ver "${desc}")
+      endif()
+    endif()
+  endif()
+endif()
+if(NOT ver)
+  set(ver "0.1.0-dev")
+endif()
+set(text "/* written by tools/setup/write_version.cmake */\n#define PS2_VERSION \"${ver}\"\n#define PS2_VERSION_GIT \"${rev}\"\n")
+set(old "")
+if(EXISTS "${OUT}")
+  file(READ "${OUT}" old)
+endif()
+if(NOT old STREQUAL text)
+  file(WRITE "${OUT}" "${text}")
+endif()
