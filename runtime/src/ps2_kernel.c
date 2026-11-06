@@ -1386,6 +1386,16 @@ void ps2_kernel_wake_ee(void) {
 }
 int ps2_kernel_ee_idle(void) {
     static int on = -1, idle_ab;
+    {   /* the usage statistics' ee_ms_p50: from the field's start to the game's first wait for the next field (cheap: once per field) */
+        extern volatile int ps2_stats_collecting;
+        extern void ps2_stats_note_ee(double ms);
+        static u64 noted;
+        if (ps2_stats_collecting && noted != vblank_delivered) {
+            u64 post = __atomic_load_n(&vb_post_ns, __ATOMIC_ACQUIRE), now = mono_ns();
+            noted = vblank_delivered;
+            if (post && now > post) ps2_stats_note_ee((double)(now - post) / 1e6);
+        }
+    }
     if (ps2_tprof_ee_idle_pending) ps2_tprof_ee_idle();      /* (PS2_THREAD_PROF: the EE's work for the field ends) */
     if (on < 0) {
         const char *e = getenv("PS2_PERF_EE_IDLE");

@@ -22,6 +22,8 @@ unset PS2_XR PS2_XR_MODE PS2_RN_VP
 [ "$mode" = native ] && export PS2_RN_VP=1
 export ACZ_LAUNCHER=${ACZ_LAUNCHER:-0}
 for kv in "$@"; do export "$kv"; done
+export ACZ_TELEMETRY=${ACZ_TELEMETRY:-off}   # (a test run sends no stream, whatever the settings file says)
+export ACZ_STATS=${ACZ_STATS:-0}             # (a test run never asks and never sends: docs/PRIVACY.md)
 timeout "$secs" build/zero/ac5.exe --data gen_zero --disc "$(cygpath -w "$ISO")" --watchdog 0 > "$log" 2>&1
 echo "== $mode ${scale}x, each field drawn $rep times ($log)"
 # gpu-speed windows are 5 s each: window 2-3 = intro flyby (heavy), window 5+ = flight

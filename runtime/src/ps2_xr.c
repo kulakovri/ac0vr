@@ -203,6 +203,7 @@ static void xrr_session(void) {
     if (XR_FAILED(g)) xrResultToString(xi, g, gs);
     ps2_log("xr: %s: the runtime offers %s Hz; it runs at %.2f Hz%s%s", XRR_EXT, n || XR_FAILED(r) ? list : "no",
             (double)now, *gs ? " " : "", gs);
+    if (XR_SUCCEEDED(g)) { extern void ps2_stats_set_refresh(double hz); ps2_stats_set_refresh((double)now); }
 }
 /* PS2_XR_REFRESH_HZ=R (once the session runs): xrRequestDisplayRefreshRateFB(R), logged; 2 s later the rate it runs at */
 static void xrr_request(void) {
@@ -684,6 +685,13 @@ int ps2_xr_pre_instance(const char ***exts, uint32_t *n) {
     XrSystemGetInfo sg; memset(&sg, 0, sizeof sg); sg.type = XR_TYPE_SYSTEM_GET_INFO; sg.formFactor = XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY;
     r = xrGetSystem(xi, &sg, &xsys);
     if (XR_FAILED(r)) { XRLOG(r, "xrGetSystem (headset not connected?)"); xrDestroyInstance(xi); xi = XR_NULL_HANDLE; xr_on = 0; return 0; }
+    {   /* usage statistics (ps2_stats.c): the runtime's and the headset's names */
+        extern void ps2_stats_set_xr(const char *runtime, const char *system);
+        XrSystemProperties sp;
+        memset(&sp, 0, sizeof sp);
+        sp.type = XR_TYPE_SYSTEM_PROPERTIES;
+        ps2_stats_set_xr(ip.runtimeName, XR_SUCCEEDED(xrGetSystemProperties(xi, xsys, &sp)) ? sp.systemName : NULL);
+    }
     PFN_xrGetVulkanGraphicsRequirementsKHR req_fn = NULL; PFN_xrGetVulkanInstanceExtensionsKHR iext_fn = NULL;
     xrGetInstanceProcAddr(xi, "xrGetVulkanGraphicsRequirementsKHR", (PFN_xrVoidFunction *)&req_fn);
     xrGetInstanceProcAddr(xi, "xrGetVulkanInstanceExtensionsKHR", (PFN_xrVoidFunction *)&iext_fn);

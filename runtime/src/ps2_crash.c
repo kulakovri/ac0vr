@@ -5,8 +5,9 @@
    newest reports are kept. ps2_fatal_report() is the same text report without a minidump, for fatal conditions that are not
    exceptions (ps2_fatal calls it; the stall exit and a lost GPU device are the next callers, stab_audit U5, U8). Nothing is
    written unless something fails: before a crash this is one sleeping thread and a memcpy per log line.
-   The dump leaves out heaps and module paths (no guest memory, no folder names); the log lines can hold folder names, and
-   nothing is ever sent anywhere.
+   The dump leaves out heaps and module paths (no guest memory, no folder names); the log lines can hold folder names. These
+   files are never sent anywhere; with usage statistics on (ps2_stats.c, docs/PRIVACY.md) the next start sends the "what" line
+   without addresses or paths, the exception code, the address relative to the exe and the module offsets of the stack.
    The writing happens on a thread of its own, started at start-up: a stack overflow leaves no stack to write from, and
    MiniDumpWriteDump should not run on the thread it describes. dbghelp.dll is loaded from System32 at start-up, not during
    the crash, when the loader lock or the heap may be taken.
@@ -180,7 +181,7 @@ static void write_report(const char *why, EXCEPTION_POINTERS *ep, DWORD tid, int
         return;
     }
 
-    putf(h, "Crash report of the game (ACZ_CRASH_REPORT=1). Nothing was sent anywhere. To report the problem, attach this\r\n"
+    putf(h, "Crash report of the game (ACZ_CRASH_REPORT=1). This file is not sent anywhere. To report the problem, attach this\r\n"
             "file and the .dmp; the log lines below can hold your folder names, so read them first.\r\n\r\n");
     putf(h, "what:     %s\r\n", why ? why : "?");
     putf(h, "when:     %04u-%02u-%02u %02u:%02u:%02u (local)\r\n", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
@@ -272,6 +273,8 @@ static void write_report(const char *why, EXCEPTION_POINTERS *ep, DWORD tid, int
 }
 
 /* ---- the next start ---- */
+static char new_report[MAX_PATH * 3 + 300];   /* the last run's marker: the report's path, a line, what happened (ps2_stats.c) */
+const char *ps2_crash_new_report(void) { return new_report; }
 static void scan_folder(const wchar_t *dir) {
     wchar_t mpath[MAX_PATH + 32], pat[MAX_PATH + 32];
     char text[MAX_PATH * 3 + 300];
@@ -289,6 +292,7 @@ static void scan_folder(const wchar_t *dir) {
         ReadFile(m, text, sizeof text - 1, &got, NULL);
         CloseHandle(m);
         text[got] = 0;
+        if (!new_report[0]) snprintf(new_report, sizeof new_report, "%s", text);
         {
             char *second = strstr(text, "\r\n");
             const char *what = "";
@@ -453,6 +457,7 @@ void ps2_crash_init(void *filter) {
 }
 
 #else   /* not Windows: the runtime has no exception filter there */
+const char *ps2_crash_new_report(void) { return ""; }
 int ps2_crash_enabled(void) { return 0; }
 void ps2_crash_log_line(const char *line, int len) { (void)line; (void)len; }
 void ps2_crash_mark(void) {}

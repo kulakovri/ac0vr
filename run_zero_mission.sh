@@ -25,5 +25,7 @@ export PS2_PAD_SCRIPT="$S"
 export ACZ_LAUNCHER=${ACZ_LAUNCHER:-0}
 for kv in "$@"; do export "$kv"; done
 mkdir -p out
+export ACZ_TELEMETRY=${ACZ_TELEMETRY:-off}   # (a test run sends no stream, whatever the settings file says)
+export ACZ_STATS=${ACZ_STATS:-0}             # (a test run never asks and never sends: docs/PRIVACY.md)
 timeout "$secs" ${ACZ_EXE:-build/zero/ac5.exe} --data gen_zero --disc "$(cygpath -w "$ISO")" --watchdog 0 > zero_mission.log 2>&1
 echo "exit $? (log: zero_mission.log)"

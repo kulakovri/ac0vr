@@ -48,6 +48,7 @@
 #include "ps2_quit.h"
 #include "ps2_settings.h"
 #include "ps2_touch.h"                       /* the TOUCH CONTROLS card: the Touch mapping in use */
+#include "ps2_stats.h"                       /* the question, SHOW WHAT IS SENT (stats_optin; docs/PRIVACY.md) */
 #include <SDL3/SDL.h>
 #include <math.h>
 #include <stdio.h>
@@ -144,6 +145,7 @@ static int pg_native_req;
 static void pg_snap_publish(void);
 static int pg_drawn_by_game(void);  /* no overlay image: the page without the TOUCH CONTROLS card, with ACZ_ENH_NATIVE */
 static void pg_open_now(int from, double now);
+static void ask_open(double now);   /* the usage statistics' question: a level of the page */
 static int pg_pad(ps2_pad_state *st, int a, int b, int y, double now);
 /* the TOUCH CONTROLS card (bug #239; below the ENHANCEMENTS page, as one of its levels) */
 static volatile int tc_req = -1;    /* an open request (from), any thread */
@@ -238,6 +240,7 @@ int ps2_quit_pad(ps2_pad_state *st, int back, int start, int a, int b, int x, in
             return 0;
         }
     }
+    if (!pg_vis && q_state == Q_IDLE && !q_swallow && ps2_stats_question_due()) ask_open(now);   /* once, at the title screen */
     if (pg_vis) {                            /* the page takes the controller; the game sees a neutral pad */
         pg_pad(st, a, b, y, now);
         pg_snap_publish();
@@ -959,7 +962,7 @@ static void hud_line_render(const char *s) {
 }
 
 /* ---- page state (renderer thread) ---- */
-enum { PG_CATS = 1, PG_ITEMS, PG_VALUES, PG_NOTICE, PG_CARD };
+enum { PG_CATS = 1, PG_ITEMS, PG_VALUES, PG_NOTICE, PG_CARD, PG_ASK, PG_SHOW };
 #define PG_MAXITEMS 160                    /* a category's rows */
 #define PG_FITROWS  10                     /* rows that fit above the help line: PG_ROW0 + 9 x PG_PITCH + 13.5 < PG_RULE */
 #define PG_OLDROWS  12                     /* ACZ_ENH_PAGE_ROWS=0: the old fixed list (rows 11-12 over the help line) */
@@ -967,7 +970,11 @@ static int pg_level, pg_from, pg_cat, pg_row, pg_val, pg_notice;
 static int pg_items[PG_MAXITEMS], pg_nitems;
 static int pg_top, pg_cat_top;             /* the first row shown of the items / of the categories (scrolling) */
 static int pg_wait;                        /* the button that opened the page must be released first */
-static int pg_prev_ok, pg_prev_back, pg_prev_start, pg_prev_dir;
+static int pg_prev_ok, pg_prev_back, pg_prev_start, pg_prev_dir, pg_prev_cir, pg_prev_tri;
+#define SH_MAX 96
+static ps2_stats_row sh_rows[SH_MAX];      /* SHOW WHAT IS SENT: the document's fields */
+static int sh_n, sh_top, sh_back;          /* ... the first row shown, the level it goes back to */
+#define SH_SHOWN 17
 static double pg_rep_t, pg_open_t, pg_gone_t;
 static int pg_restart_changed;             /* an item waiting for a restart was changed on this visit */
 static char pg_msg[200];                   /* the help line after a change (until the cursor moves) */
@@ -1012,7 +1019,7 @@ static const char *pg_reset_prompt(int i, int ps) {
     if (pg_reset_until == 0.0 || strcmp(ps2_enh_item_at(i)->key, "reset_all")) return NULL;
     return ps ? "PRESS CROSS AGAIN" : "PRESS A AGAIN";
 }
-static int pg_drawn_by_game(void) { return pg_native && pg_level != PG_CARD; }
+static int pg_drawn_by_game(void) { return pg_native && pg_level != PG_CARD && pg_level != PG_ASK && pg_level != PG_SHOW; }
 /* ACZ_ENH_PAGE_ROWS: rows shown at once, the list scrolling with the cursor (default PG_FITROWS; 4..PG_FITROWS);
    0 = the old fixed list of the first PG_OLDROWS rows */
 static int pg_rows(void) {
@@ -1074,6 +1081,33 @@ static void pg_close(int quit) {
             quit ? ": quit to apply them" : "", ps2_enh_pending_count(), ps2_enh_mission_count());
     if (quit) ps2_quit_request("ENHANCEMENTS: restart to apply");
 }
+/* The usage statistics' question (stats_optin, docs/PRIVACY.md): a level of the page, so it has the page's quad, window text and
+   neutral pad. Once at the title screen of a build with a key (ps2_stats_question_due); it goes away if the game leaves the title
+   (the game's attract movie) and comes back with it; A / B answer, Y shows the document. */
+static void ask_open(double now) {
+    pg_native = 0;
+    pg_from = PS2_ENH_FROM_MENUS;
+    pg_level = PG_ASK;
+    pg_wait = 1;
+    pg_msg[0] = 0;
+    pg_restart_changed = 0;
+    pg_open_t = now;
+    pg_gone_t = 0.0;
+    pg_prev_dir = 0;
+    pg_vis = 1;
+    pg_dirty();
+    ps2_log("stats: the question is up (the title screen)");
+}
+static void sh_open(int back) {
+    sh_n = ps2_stats_rows(sh_rows, SH_MAX);
+    sh_top = 0;
+    sh_back = back;
+    pg_level = PG_SHOW;
+    pg_wait = 1;
+    pg_prev_dir = 0;
+    pg_dirty();
+    ps2_stats_log_document();
+}
 /* leaving the page: after a change that needs a restart, the notice first */
 static void pg_leave(void) {
     if (pg_restart_changed && ps2_enh_pending_count() > 0) {
@@ -1091,7 +1125,8 @@ static void pg_change(int i, int c) {
     if (r < 0) {
         char hb[96];
         const char *o = ps2_enh_held_by(i, hb, sizeof hb);
-        snprintf(pg_msg, sizeof pg_msg, "Set by %s when the game started: it cannot be changed here.", o ? o : "?");
+        if (o) snprintf(pg_msg, sizeof pg_msg, "Set by %s when the game started: it cannot be changed here.", o);
+        else snprintf(pg_msg, sizeof pg_msg, "Not available in this build.");
     } else if (r == PS2_ENH_RESTART) {
         pg_restart_changed = 1;
         snprintf(pg_msg, sizeof pg_msg, "Saved. Restart the game to apply.");
@@ -1104,9 +1139,11 @@ static void pg_change(int i, int c) {
         snprintf(pg_msg, sizeof pg_msg, "%s", !strcmp(it->key, "recentre_now") ? "View recentred."
                  : !strcmp(it->key, "rumble_test") ? ps2_video_rumble_note()
                  : !strcmp(it->key, "lever_neutral") ? ps2_hotas_neutral_note()
+                 : !strcmp(it->key, "stats_reset") ? "A new id. What was sent before is no longer linked to this PC."
                  : "Everything is back to its default, F4's settings too. Saved; some wait for the next mission or start.");
     }
-    if (r == PS2_ENH_ACTION && strcmp(it->key, "recentre_now") && strcmp(it->key, "rumble_test") && strcmp(it->key, "lever_neutral"))
+    if (r == PS2_ENH_ACTION && strcmp(it->key, "recentre_now") && strcmp(it->key, "rumble_test") && strcmp(it->key, "lever_neutral")
+        && strcmp(it->key, "stats_reset"))
         pg_restart_changed = 1;
     pg_dirty();
 }
@@ -1119,24 +1156,45 @@ static int pg_pad(ps2_pad_state *st, int a, int b, int y, double now) {
     int ok = (bt & (1u << PS2_ACT_CROSS)) || a;
     int back = (bt & ((1u << PS2_ACT_CIRCLE) | (1u << PS2_ACT_TRIANGLE))) || b || y;
     int start = (bt & (1u << PS2_ACT_START)) != 0;
+    int cir = (bt & (1u << PS2_ACT_CIRCLE)) || b, tri = (bt & (1u << PS2_ACT_TRIANGLE)) || y;   /* (the question tells them apart) */
     int dir = (bt & (1u << PS2_ACT_UP)) || st->ly < 56 ? 1 : (bt & (1u << PS2_ACT_DOWN)) || st->ly > 200 ? 2
             : (bt & (1u << PS2_ACT_LEFT)) || st->lx < 56 ? 3 : (bt & (1u << PS2_ACT_RIGHT)) || st->lx > 200 ? 4 : 0;
     /* the page belongs to its menu: it closes if the game left it (pause ended, a flight started) */
     int gs = game_state();
-    if ((pg_from == PS2_ENH_FROM_PAUSE && gs != PS2_QUIT_GAME_PAUSED) || gs == PS2_QUIT_GAME_FLYING) {
+    int asking = pg_level == PG_ASK || (pg_level == PG_SHOW && sh_back == PG_ASK);
+    if (asking) {                                    /* the question belongs to the title screen */
+        if (!ps2_stats_question_due()) {
+            if (pg_gone_t == 0.0) pg_gone_t = now;
+            else if (now - pg_gone_t > 0.2) { pg_close(0); return 1; }
+        } else pg_gone_t = 0.0;
+    } else if ((pg_from == PS2_ENH_FROM_PAUSE && gs != PS2_QUIT_GAME_PAUSED) || gs == PS2_QUIT_GAME_FLYING) {
         if (pg_gone_t == 0.0) pg_gone_t = now;
         else if (now - pg_gone_t > 1.0) { pg_close(0); return 1; }
     } else pg_gone_t = 0.0;
     if (pg_wait) {
         if (!ok && !back && !start && !dir) pg_wait = 0;
-        pg_prev_ok = ok; pg_prev_back = back; pg_prev_start = start; pg_prev_dir = dir;
+        pg_prev_ok = ok; pg_prev_back = back; pg_prev_start = start; pg_prev_dir = dir; pg_prev_cir = cir; pg_prev_tri = tri;
         return 1;
     }
     if (pg_reset_until != 0.0 && now >= pg_reset_until) pg_reset_cancel("no second press in time");
     int okp = ok && !pg_prev_ok, backp = back && !pg_prev_back, startp = start && !pg_prev_start, step = 0;
+    int cirp = cir && !pg_prev_cir, trip = tri && !pg_prev_tri;
     if (dir && dir != pg_prev_dir) { step = dir; pg_rep_t = now + 0.40; }
     else if (dir && now >= pg_rep_t) { step = dir; pg_rep_t = now + 0.11; }
-    pg_prev_ok = ok; pg_prev_back = back; pg_prev_start = start; pg_prev_dir = dir;
+    pg_prev_ok = ok; pg_prev_back = back; pg_prev_start = start; pg_prev_dir = dir; pg_prev_cir = cir; pg_prev_tri = tri;
+    if (pg_level == PG_ASK) {                        /* the question: A yes, B no, Y the document */
+        if (okp) { ps2_stats_answer(1); pg_close(0); }
+        else if (cirp) { ps2_stats_answer(0); pg_close(0); }
+        else if (trip) sh_open(PG_ASK);
+        return 1;
+    }
+    if (pg_level == PG_SHOW) {                       /* SHOW WHAT IS SENT: up and down scroll, B or Menu back */
+        int last = sh_n > SH_SHOWN ? sh_n - SH_SHOWN : 0;
+        if (step == 1 && sh_top > 0) { sh_top--; pg_dirty(); }
+        else if (step == 2 && sh_top < last) { sh_top++; pg_dirty(); }
+        else if (backp || startp) { pg_level = sh_back; pg_wait = 1; pg_msg[0] = 0; pg_dirty(); }
+        return 1;
+    }
     if (pg_level == PG_CARD) {                       /* the TOUCH CONTROLS card: any of A B Y Menu closes it */
         if (startp || okp || backp) tc_close();
         else if (step == 3 || step == 4) { tc_view = tc_view == PS2_TOUCH_STICK ? PS2_TOUCH_PAD : PS2_TOUCH_STICK; pg_dirty(); }
@@ -1166,6 +1224,7 @@ static int pg_pad(ps2_pad_state *st, int a, int b, int y, double now) {
             pg_change(i, c % it->n);
         } else if (okp) {
             if (!strcmp(it->key, "touch_card")) { tc_back = PG_ITEMS; tc_level(); }   /* SHOW TOUCH CONTROLS */
+            else if (!strcmp(it->key, "stats_show")) sh_open(PG_ITEMS);               /* SHOW WHAT IS SENT */
             else if (!strcmp(it->key, "reset_all") && pg_reset_press(now)) { }          /* (only asked) */
             else if (it->apply == PS2_ENH_ACTION) pg_change(i, 0);
             else if (ps2_enh_override(i) && strcmp(it->key, "pad_layout")) pg_change(i, pg_choice(i));   /* says why */
@@ -1341,9 +1400,88 @@ static void pg_item_help(char *h, size_t n) {
                  : ps2_enh_retry_waits(i) ? " From the next mission." : " From the next mission or RETRY.");
     }
 }
+/* words wrapped to maxw from (x, y) in the menu font; returns the y under the last line */
+static float pg_wrap(float x, float y, float maxw, float pitch, const char *s, const float *c) {
+    char line[200];
+    while (*s) {
+        size_t fit = 0, e = 0;
+        for (;;) {
+            while (s[e] && s[e] != ' ') e++;
+            size_t n = e < sizeof line - 1 ? e : sizeof line - 1;
+            memcpy(line, s, n); line[n] = 0;
+            if (fit && gf_width(0, line) > maxw) break;
+            fit = n;
+            if (!s[e] || n < e) break;
+            e++;
+        }
+        memcpy(line, s, fit); line[fit] = 0;
+        gf_text(0, x, y, line, c[0], c[1], c[2], 1.0f);
+        s += fit;
+        while (*s == ' ') s++;
+        y += pitch;
+    }
+    return y;
+}
+/* The question: the motivation first; the owner's text, laid out, in the game's tone */
+static const char *const ask_title = "HELP IMPROVE THIS PROJECT?";
+static const char *const ask_body[3] = {
+    "ONE PERSON MAKES THIS. KNOWING WHICH PCS AND HEADSETS PLAY, WHICH MISSIONS CRASH AND HOW SMOOTHLY IT RUNS DECIDES WHAT GETS FIXED NEXT.",
+    "SENT: GPU, CPU, MEMORY, HEADSET, SETTINGS, MISSIONS FLOWN, FRAME TIMES, CRASH REPORTS.",
+    "NEVER: YOUR NAME, YOUR FILES, YOUR IP ADDRESS, ANYTHING YOU TYPE." };
+static const char *const ask_note = "(CHANGE THIS ANY TIME: PAUSE > ENHANCEMENTS > SYSTEM)";
+extern const char *ps2_video_pad_active_name(void);
+/* a choice: the controller's glyph, or the keyboard key's name with no controller connected */
+static void ask_choice(float x, float y, char kind, int act, const char *s) {
+    if (ps2_video_pad_active_name()) {
+        const float rad = 6.0f;
+        glyph(kind, (x + rad) * PG_S, (y + 5.0f) * PG_S, rad * PG_S);
+        gf_text(0, x + 2.0f * rad + 5.0f, y, s, pg_yel[0], pg_yel[1], pg_yel[2], 1.0f);
+    } else {
+        char t[120];
+        snprintf(t, sizeof t, "[%s] %s", ps2_key_name(ps2_cfg.key[act][0]), s);
+        gf_text(0, x, y, t, pg_yel[0], pg_yel[1], pg_yel[2], 1.0f);
+    }
+}
+static void ask_render(void) {
+    float w = gf_width(0, ask_title), y = 42.0f, maxw = 409.6f - 2.0f * PG_LX;
+    gf_text(0, (409.6f - w) * 0.5f, 15.0f, ask_title, pg_yel[0], pg_yel[1], pg_yel[2], 1.0f);
+    pg_rect(8.0f, 33.0f, 401.6f, 33.8f, pg_yel[0], pg_yel[1], pg_yel[2], 1.0f);
+    for (int i = 0; i < 3; i++) y = pg_wrap(PG_LX, y, maxw, 13.5f, ask_body[i], pg_help) + 5.0f;
+    ask_choice(PG_LX + 6.0f, 192.0f, 'A', PS2_ACT_CROSS, "YES, SHARE");
+    ask_choice(PG_LX + 196.0f, 192.0f, 'B', PS2_ACT_CIRCLE, "NO, THANKS");
+    ask_choice(PG_LX + 6.0f, 220.0f, 'Y', PS2_ACT_TRIANGLE, "SHOW EXACTLY WHAT IS SENT");
+    pg_rect(8.0f, PG_RULE, 401.6f, PG_RULE + 0.8f, pg_yel[0], pg_yel[1], pg_yel[2], 1.0f);
+    pg_help_text(ask_note);
+}
+/* SHOW WHAT IS SENT: the document that is sent, a field per row, scrolling */
+static void sh_render(void) {
+    gf_text(1, 10.0f, 8.0f, sh_back == PG_ASK ? "WHAT IS SENT" : "ENHANCEMENTS>SYSTEM>WHAT IS SENT", pg_yel[0], pg_yel[1], pg_yel[2], 1.0f);
+    pg_hint(400.0f, 7.0f, "{B} BACK");
+    pg_rect(8.0f, PG_RULE, 401.6f, PG_RULE + 0.8f, pg_yel[0], pg_yel[1], pg_yel[2], 1.0f);
+    for (int s = 0; s < SH_SHOWN && sh_top + s < sh_n; s++) {
+        const ps2_stats_row *r = &sh_rows[sh_top + s];
+        float y = 26.0f + 13.0f * (float)s;
+        float x1 = gf_text(0, PG_LX, y, r->k, pg_help[0], pg_help[1], pg_help[2], 1.0f);
+        float vx = x1 + 8.0f > 176.0f ? x1 + 8.0f : 176.0f;
+        gf_text(0, vx, y, r->v, pg_yel[0], pg_yel[1], pg_yel[2], 1.0f);
+    }
+    if (sh_top > 0) {                                /* more rows above / below */
+        float cx = PG_MX * PG_S, cy = 30.0f * PG_S, hw = 4.0f * PG_S, hh = 2.75f * PG_S;
+        float tri[6] = { cx, cy - hh, cx - hw, cy + hh, cx + hw, cy + hh };
+        shape(cx - hw, cy - hh, cx + hw, cy + hh, sd_tri, tri, pg_yel[0], pg_yel[1], pg_yel[2], 1.0f);
+    }
+    if (sh_top + SH_SHOWN < sh_n) {
+        float cx = PG_MX * PG_S, cy = 244.0f * PG_S, hw = 4.0f * PG_S, hh = 2.75f * PG_S;
+        float tri[6] = { cx, cy + hh, cx - hw, cy - hh, cx + hw, cy - hh };
+        shape(cx - hw, cy - hh, cx + hw, cy + hh, sd_tri, tri, pg_yel[0], pg_yel[1], pg_yel[2], 1.0f);
+    }
+    pg_help_text("The next document, exactly as it would be sent, a field per row. Up and down scroll.");
+}
 static void pg_render_body(void) {
     char crumb[96], buf[64];
     if (pg_level == PG_CARD) { tc_render(); return; }
+    if (pg_level == PG_ASK) { ask_render(); return; }
+    if (pg_level == PG_SHOW) { sh_render(); return; }
     const char *root = pg_from == PS2_ENH_FROM_PAUSE ? "PAUSE MENU>ENHANCEMENTS" : "ENHANCEMENTS";
     if (pg_level >= PG_ITEMS && pg_level != PG_NOTICE) snprintf(crumb, sizeof crumb, "%s>%s", root, ps2_enh_cat_name(pg_cat));
     else snprintf(crumb, sizeof crumb, "%s", root);
@@ -1421,7 +1559,8 @@ static void pg_render_body(void) {
         const char *vs = ps2_enh_value_name(i, buf, sizeof buf);
         if (q_ps && !strcmp(vs, "PRESS A")) vs = "PRESS CROSS";   /* (the active controller's button, as the header) */
         if (pg_reset_prompt(i, q_ps)) vs = pg_reset_prompt(i, q_ps);
-        float vx = gf_text(0, vx0, y, vs, vc[0], vc[1], vc[2], 1.0f);
+        /* (a value too long for the menu font: the small one, NOT AVAILABLE IN THIS BUILD) */
+        float vx = gf_text(vx0 + gf_width(0, vs) > 404.0f ? 1 : 0, vx0, y, vs, vc[0], vc[1], vc[2], 1.0f);
         if (ps2_enh_pending(i)) gf_text(0, vx + 5.0f, y, "*", vc[0], vc[1], vc[2], 1.0f);
         else if (ps2_enh_changed_mission(i)) gf_text(0, vx + 5.0f, y, "+", vc[0], vc[1], vc[2], 1.0f);
     }
@@ -1451,7 +1590,7 @@ static ps2_enh_snap pg_snap_pub;
 static void pg_snap_publish(void) {
     static ps2_enh_snap s;
     static u32 done;
-    if (!pg_native || pg_level == PG_CARD || done == pg_gen) return;
+    if (!pg_native || pg_level == PG_CARD || pg_level == PG_SHOW || done == pg_gen) return;
     done = pg_gen;
     memset(&s, 0, sizeof s);
     s.gen = pg_gen;
@@ -1846,6 +1985,20 @@ static size_t tc_text(char *out, size_t n) {
 }
 
 /* the page as text for the window (no headset) */
+/* ACZ_DEBUG_ENH=1: the question and SHOW WHAT IS SENT as the window draws them, when they change (ps2_vk_screenshot has no UI in it) */
+static void sh_log_text(const char *t) {
+    static int dbg = -1;
+    static u32 lastgen;
+    if (dbg < 0) { const char *e = getenv("ACZ_DEBUG_ENH"); dbg = e && *e == '1'; }
+    if (!dbg || lastgen == pg_gen) return;
+    lastgen = pg_gen;
+    for (const char *p = t; *p; ) {
+        const char *nl = strchr(p, '\n');
+        int n = nl ? (int)(nl - p) : (int)strlen(p);
+        ps2_log("quit: window text: %.*s", n, p);
+        p += n + (nl ? 1 : 0);
+    }
+}
 const char *ps2_quit_enh_text(int *sel) {
     static char out[2400];
     char buf[64];
@@ -1854,6 +2007,25 @@ const char *ps2_quit_enh_text(int *sel) {
     if (pg_level == PG_CARD) { tc_text(out, sizeof out); return out; }
     size_t k = 0;
 #define PG_OUT(...) do { if (k < sizeof out) k += (size_t)snprintf(out + k, sizeof out - k, __VA_ARGS__); } while (0)
+    if (pg_level == PG_ASK) {                        /* the question without a headset; the buttons as words */
+        const int pad = ps2_video_pad_active_name() != NULL;
+        const char *ka = pad ? (q_ps ? "Cross" : "A") : ps2_key_name(ps2_cfg.key[PS2_ACT_CROSS][0]);
+        const char *kb = pad ? (q_ps ? "Circle" : "B") : ps2_key_name(ps2_cfg.key[PS2_ACT_CIRCLE][0]);
+        const char *ky = pad ? (q_ps ? "Triangle" : "Y") : ps2_key_name(ps2_cfg.key[PS2_ACT_TRIANGLE][0]);
+        PG_OUT("%s\n\nONE PERSON MAKES THIS. KNOWING WHICH PCS AND HEADSETS PLAY, WHICH MISSIONS CRASH\n"
+               "AND HOW SMOOTHLY IT RUNS DECIDES WHAT GETS FIXED NEXT.\n%s\n%s\n\n[%s] YES, SHARE      [%s] NO, THANKS      [%s] SHOW EXACTLY WHAT IS SENT\n%s\n",
+               ask_title, ask_body[1], ask_body[2], ka, kb, ky, ask_note);
+        sh_log_text(out);
+        return out;
+    }
+    if (pg_level == PG_SHOW) {
+        PG_OUT("WHAT IS SENT%s\n", sh_n > SH_SHOWN ? " (up and down scroll)" : "");
+        for (int s = 0; s < SH_SHOWN && sh_top + s < sh_n; s++)
+            PG_OUT("%-24s %s\n", sh_rows[sh_top + s].k, sh_rows[sh_top + s].v);
+        PG_OUT("\n[B] back\n");
+        sh_log_text(out);
+        return out;
+    }
     PG_OUT("%s%s%s\n", pg_from == PS2_ENH_FROM_PAUSE ? "PAUSE MENU > ENHANCEMENTS" : "ENHANCEMENTS",
         pg_level == PG_ITEMS || pg_level == PG_VALUES ? " > " : "",
         pg_level == PG_ITEMS || pg_level == PG_VALUES ? ps2_enh_cat_name(pg_cat) : "");

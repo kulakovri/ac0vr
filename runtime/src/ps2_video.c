@@ -5581,6 +5581,22 @@ static int vk_init(void) {
             if ((memprops.memoryHeaps[h].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) && memprops.memoryHeaps[h].size > vl)
                 vl = memprops.memoryHeaps[h].size;
         ps2_enh_set_gpu(pr.deviceName, pr.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU, (double)vl / 1073741824.0);
+        {   /* usage statistics (ps2_stats.c): the driver's own version text where it has one */
+            extern void ps2_stats_set_gpu(const char *name, const char *driver, double vram_gb);
+            char drv[64] = "";
+            if (pr.apiVersion >= VK_API_VERSION_1_2) {
+                VkPhysicalDeviceDriverProperties dp;
+                VkPhysicalDeviceProperties2 p2;
+                memset(&dp, 0, sizeof dp); memset(&p2, 0, sizeof p2);
+                dp.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES;
+                p2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+                p2.pNext = &dp;
+                vkGetPhysicalDeviceProperties2(phys, &p2);
+                snprintf(drv, sizeof drv, "%s", dp.driverInfo);
+            }
+            if (!drv[0]) snprintf(drv, sizeof drv, "0x%08X", pr.driverVersion);
+            ps2_stats_set_gpu(pr.deviceName, drv, (double)vl / 1073741824.0);
+        }
     }
 
     nq = 16;
@@ -31816,6 +31832,13 @@ static void gpu_speed_collect(vk_frame *fr) {
     scrab_sample((int)(fr - frames), ms, ((stamps[2] - stamps[1]) & mask) * gpu_timestamp_period / 1e6);   /* cinema
                                                                      screen source: PS2_XR_SCREEN_FROM_RT_AB */
     if (fr->timing_kind) hgov_update(ms / (double)bench_repeat_n(), (int)(fr - frames));   /* the frame-time governor */
+    {   /* usage statistics: the same frame time, over flight frames (without a headset every frame counts) */
+        extern volatile int ps2_stats_collecting;
+        extern void ps2_stats_note_gpu(double ms, int flying, int gov_level);
+        extern int ps2_xr_session_running(void);
+        if (ps2_stats_collecting && (fr->timing_kind || !ps2_xr_session_running()))
+            ps2_stats_note_gpu(ms / (double)bench_repeat_n(), hgov_flying(), hgov.on ? hgov.level : 0);
+    }
     if (fr->timing_kind == 2) gov_stereo_ms = gov_stereo_ms > 0.0 ? 0.9 * gov_stereo_ms + 0.1 * ms : ms;
     else if (fr->timing_kind == 1) gov_mono_ms = gov_mono_ms > 0.0 ? 0.9 * gov_mono_ms + 0.1 * ms : ms;
     if (gov_stereo_ms > 0.0 && gov_mono_ms > 0.0 && fr->timing_kind) {
@@ -33619,6 +33642,7 @@ void ps2_video_select_gamepad(SDL_JoystickID id) {
 int ps2_video_pad_count(void) { return npads; }
 SDL_Gamepad *ps2_video_pad_at(int i) { return i >= 0 && i < npads ? pads[i].g : NULL; }
 const char *ps2_video_pad_active_name(void) { return pad_active_name(); }
+const char *ps2_video_pad_class_name(void) { return padc_name[pad_active_cls()]; }   /* (usage statistics) */
 int ps2_video_pad_touch_state(void) { return pad_active == PAD_TOUCH ? 2 : touch_there; }   /* 0 none, 1 there, 2 active */
 int ps2_video_pad_forced_kind(void) { return pad_force < 0 ? 0 : pad_force; }
 
@@ -35079,6 +35103,12 @@ static void pump_events(void) {
     settings_service();
     poll_input();
     ps2_quit_tick();                     /* a requested quit: memory card wait, then the close (ps2_quit.c) */
+    {   extern void ps2_telem_tick(void);
+        ps2_telem_tick();                /* ACZ_TELEMETRY: a datagram when the EE published a game frame (ps2_telem.c) */
+    }
+    {   extern void ps2_stats_tick(void);
+        ps2_stats_tick();                /* usage statistics: what only this thread may read, twice a second (ps2_stats.c) */
+    }
     ps2_texrep_pad(pad_glyph_class(), pad_active_name());
 }
 

@@ -182,7 +182,7 @@ def write_ninja(path, bundle, tc_info, gen, obj_dir, exe_new):
         f.write('rule hot\n  command = "%s" %s -O3 -MD -MF $out.d -c $in -o $out\n  description = C $in\n' % (cc, common))
         # (ACZ_LINK_VERBOSE: make_release.sh's rehearsal: prune_bundle.py reads what the link opened)
         trace = " -Wl,--verbose" if os.environ.get("ACZ_LINK_VERBOSE") else ""
-        f.write('rule link\n  command = "%s" -o $out $in -Wl,--whole-archive "%s/libac5rt.a" -Wl,--no-whole-archive "%s/liblua54.a" -L"%s" -lopenxr_loader -lSDL3 -lvulkan-1 -lm -lpthread -static-libstdc++ -static-libgcc %s%s\n  description = link $out\n' % (
+        f.write('rule link\n  command = "%s" -o $out $in -Wl,--whole-archive "%s/libac5rt.a" -Wl,--no-whole-archive "%s/liblua54.a" -L"%s" -lopenxr_loader -lSDL3 -lvulkan-1 -lws2_32 -lwinhttp -lm -lpthread -static-libstdc++ -static-libgcc %s%s\n  description = link $out\n' % (
             cxx, libs, libs, libs, tc_info.get("ldflags", ""), trace))
         for src in gen_sources(gen):
             o = os.path.join(obj_dir, os.path.basename(src) + ".o")

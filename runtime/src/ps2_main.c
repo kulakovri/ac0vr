@@ -13,6 +13,7 @@
 #include "rn.h"
 #include "ps2_quit.h"
 #include "ps2_profile.h"
+#include "ps2_stats.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -243,6 +244,7 @@ void ps2_finish(const char *why) {
     ps2_state_dump_if_armed();
     ps2_mc_flush();                      /* an unwritten card change (only when no card file is open) */
     fflush(stdout);
+    ps2_stats_exit();                    /* the session's document, sent if it can be in 2 s (ps2_stats.c) */
     ps2_quit_exit(0);                    /* _exit(0), without DLL detach handlers after OpenXR (ps2_quit.c) */
 }
 
@@ -687,6 +689,7 @@ int main(int argc, char **argv) {
         return bad ? 1 : 0;
     }
     ps2_settings_load();
+    ps2_stats_init();                    /* usage statistics: the player's answer, last run's documents (ps2_stats.c) */
     ps2_video_hidden(want_hidden);
     extern int zero_vr_is_zero(void);
     if (want_video && ps2_video_init("PS2 recomp VR", 640, 448) != 0) {

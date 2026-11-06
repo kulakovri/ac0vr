@@ -13,6 +13,7 @@
 #include "ps2_menv.h"
 #include "ps2_hook.h"
 #include "ps2_xr.h"
+#include "ps2_stats.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1623,6 +1624,11 @@ static int z_mission_init(ps2_ctx *ctx, void *user) {
             (unsigned long long)ps2_kernel_vblank_count(), ra, why,
             z_keep_on() ? ": the canopy starts afresh at the next flight frame (ACZ_IMM_RESET_KEEP)" : "");
     if (z_keep_on()) zero_vr_imm_reset_request(3);
+    {   /* usage statistics: a RETRY or a RESTART is a new attempt */
+        extern void zero_stats_retry(const char *result);
+        if (ra == 0x001D3CECu) zero_stats_retry("left");
+        else if (ra == 0x001D4280u) zero_stats_retry("failed");
+    }
     /* A new attempt is a next mission for the page's rows (ACZ_MENU_RETRY_EDGE, default on; 0 = they wait for GameControl::enter).
        Every caller is a menu's choice: the pause menu's RETRY's YES (id 3), the menu after a mission's end (+0x4490, id 1). The other
        menu after the end (+0x449C, id 1, return 0x1D43FC) was never run here: no edge, what is saved goes on waiting. */
@@ -3352,6 +3358,145 @@ int zero_instr_get(zero_instr *out) {
     pthread_mutex_unlock(&z_instr_mx);
     return out->valid;
 }
+/* ---- The telemetry stream's data (ACZ_TELEMETRY, telem_udp 2026-11-04; docs/TELEMETRY.md; ps2_telem.c sends it). Read
+   only from the game's memory, once per flight frame on the EE thread (tm_frame, from instr_hook), plus three counting
+   hooks; the renderer thread copies the result (zero_telem_get).
+   - Velocity and acceleration: the position FM+0x3B0 differenced between the fields that moved it (a field without a game
+     frame moves nothing: the raw second difference spiked to 4-5 G there, see ACZ_INSTR_FM), in displayed metres (6.656
+     units: gf_load's scale, the world's speed then equals the HUD number), turned into body axes with the attitude
+     FM+0x3C0. Sideslip and the lateral and longitudinal load come from these; the up axis keeps the instruments' G.
+   - Body rates: the flight model's own FM+0x1B0 / 0x1B4 / 0x1B8 (rad per frame).
+   - Mach: the HUD speed over the ISA speed of sound at the altimeter's height. The game has no air temperature.
+   - Ground contact FM+0x236 bit 0 (real). The landing gear: the game has none to read (zero_syssnd.c's trace and record
+     diffs over a real take-off); zero_syssnd_gear() is that file's model, unknown with ACZ_SND_SYSTEMS=0.
+   - Counters: gun = the player update's gun shot (rumble pattern 13 from 0x232EAC, every 10 fields while firing, played
+     or not); missiles / specials = their counts dropping between two flight frames, in rounds; hits = the damage function
+     0x1FCD28 on the player's unit in flight (the crash replay's calls and the crash itself, amount >= 1000, not counted).
+   - Health: the hit points s16 U+0x398 against the most seen since the mission (re)start (as zero_cracks.c).
+   - high_g: L1 + R1 as the game's pad read sees them (ps2_pad_seen_buttons, scripted presses included). */
+extern float zero_syssnd_gear(void);       /* zero_syssnd.c */
+extern volatile u16 ps2_pad_seen_buttons;  /* ps2_hle_pad.c */
+static volatile unsigned tm_gun, tm_msl, tm_spc, tm_hits;
+static volatile u64 tm_gun_f;              /* the last gun shot's field */
+static volatile u64 tm_gc_field;           /* GameControl::enter's field: an older instrument frame is another mission's */
+static volatile u64 tm_sky_field;          /* the sky update's last field: the world is drawn (an intro flyby, not a load) */
+static volatile int tm_aircraft = -1, tm_mission = -1;
+static volatile int tm_hp_reset = 1;
+static volatile s32 tm_last_hp = 1;        /* the player's hit points at the last flight frame (usage statistics: failed or left) */
+static zero_telem z_telem;
+static double tm_cpu_ns; static u32 tm_cpu_n;   /* ACZ_DEBUG_TELEMETRY: tm_frame's own time on the EE thread */
+static int tm_pattern_hook(ps2_ctx *ctx, void *user) {
+    (void)user;
+    if ((int)(s8)(ctx->r[6].uw[0] & 0xFFu) == 13 && ctx->r[31].uw[0] == 0x00232EACu) {
+        tm_gun++;
+        tm_gun_f = ps2_kernel_vblank_count();
+    }
+    return 0;
+}
+static int tm_damage_hook(ps2_ctx *ctx, void *user) {
+    (void)user;
+    u32 u = ctx->r[4].uw[0], amount = ctx->r[7].uw[0] & 0xFFFFu;
+    if (u && u == zero_vr_player_unit() && amount > 0u && amount < 1000u && z_instr_field
+        && ps2_kernel_vblank_count() - z_instr_field <= 8u)
+        tm_hits++;
+    return 0;
+}
+static int tm_sky_hook(ps2_ctx *ctx, void *user) { (void)ctx; (void)user; tm_sky_field = ps2_kernel_vblank_count(); return 0; }
+static void tm_install(void) {
+    int g = ps2_r32(0x00110980u) == 0x27BDFFD0u && ps2_hook_before(0x00110980u, tm_pattern_hook, NULL, 60, "zero-telem") >= 0;
+    int h = ps2_r32(0x001FCD28u) >> 16 == 0x27BDu && ps2_hook_before(0x001FCD28u, tm_damage_hook, NULL, 60, "zero-telem") >= 0;
+    int s = ps2_r32(0x001604A0u) >> 16 == 0x27BDu && ps2_hook_before(0x001604A0u, tm_sky_hook, NULL, 60, "zero-telem") >= 0;
+    if (!g || !h || !s) ps2_log("zero-vr: telemetry: hooks missing (gun %d, hits %d, sky %d)", g, h, s);
+}
+/* once per flight frame (instr_hook), with the frame's zero_instr; publishes under z_instr_mx with it */
+static void tm_frame(u32 player, u64 f, const zero_instr *v, float pitch, float yaw, float roll, zero_telem *t) {
+    static float lp[3], lw[3], la[3] = { 0.0f, 9.81f, 0.0f };
+    static u64 lf;
+    static int have_w, lmsl = -1, lspc = -1;
+    static s32 hp_max;
+    u32 fm = player + 0xEF0u;
+    float p[3];
+    for (u32 i = 0; i < 3; i++) p[i] = f_of(ps2_r32(fm + 0x3B0u + 4u * i));
+    u64 gap = lf ? f - lf : 0u;
+    float d[3] = { p[0] - lp[0], p[1] - lp[1], p[2] - lp[2] };
+    float d2 = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
+    if (!lf || gap > 8u || d2 > (120.0f * gap * 6.656f) * (120.0f * gap * 6.656f)) {   /* a new flight, a jump, a pause */
+        have_w = 0;
+        la[0] = la[2] = 0.0f; la[1] = 9.81f;
+        memcpy(lp, p, sizeof lp); lf = f;
+    } else if (d2 > 0.0f) {
+        float dt = (float)gap / 60.0f, w[3];
+        for (int i = 0; i < 3; i++) w[i] = d[i] / (6.656f * dt);
+        if (have_w) {
+            for (int i = 0; i < 3; i++) {
+                float a = (w[i] - lw[i]) / dt + (i == 1 ? 9.81f : 0.0f);      /* felt = acceleration + gravity */
+                if (a > -300.0f && a < 300.0f) la[i] += (a - la[i]) * 0.25f;  /* (the float position's noise: ~0.5 G raw) */
+            }
+        }
+        memcpy(lw, w, sizeof lw); have_w = 1;
+        memcpy(lp, p, sizeof lp); lf = f;
+    }
+    float cy = cosf(yaw), sy = sinf(yaw), cp = cosf(pitch), sp = sinf(pitch), cr = cosf(roll), sr = sinf(roll);
+    const float art[3] = { cy * cr + sy * sp * sr, cp * sr, -sy * cr + cy * sp * sr };
+    const float aup[3] = { -sr * cy + cr * sp * sy, cp * cr, sr * sy + cr * sp * cy };
+    const float afw[3] = { -sy * cp, sp, -cy * cp };
+    t->in = *v;
+    t->field = f;
+    for (int i = 0; i < 3; i++) t->pos[i] = p[i] * 400.0f / 2048.0f;
+    t->vel[0] = lw[0] * art[0] + lw[1] * art[1] + lw[2] * art[2];
+    t->vel[1] = lw[0] * aup[0] + lw[1] * aup[1] + lw[2] * aup[2];
+    t->vel[2] = lw[0] * afw[0] + lw[1] * afw[1] + lw[2] * afw[2];
+    t->acc[0] = la[0] * art[0] + la[1] * art[1] + la[2] * art[2];
+    t->acc[1] = la[0] * aup[0] + la[1] * aup[1] + la[2] * aup[2];
+    t->acc[2] = la[0] * afw[0] + la[1] * afw[1] + la[2] * afw[2];
+    t->sideslip_deg = have_w && (fabsf(t->vel[2]) > 1.0f || fabsf(t->vel[0]) > 1.0f) ? atan2f(t->vel[0], t->vel[2]) * 57.29578f : 0.0f;
+    t->lat_g = t->acc[0] / 9.81f;
+    t->long_g = t->acc[2] / 9.81f;
+    /* (the stream's signs: nose up, nose right, right wing down positive; the game's yaw and roll rates are the reverse: the
+       attitude's own differences agree to 0.5 deg/s) */
+    t->rate_dps[0] = f_of(ps2_r32(fm + 0x1B0u)) * 60.0f * 57.29578f;
+    t->rate_dps[1] = -f_of(ps2_r32(fm + 0x1B4u)) * 60.0f * 57.29578f;
+    t->rate_dps[2] = -f_of(ps2_r32(fm + 0x1B8u)) * 60.0f * 57.29578f;
+    {   float h = v->alt_ft / 3.2808f, T = h < 11000.0f ? 288.15f - 0.0065f * (h > 0.0f ? h : 0.0f) : 216.65f;
+        t->mach = v->speed_kt * 0.51444f / sqrtf(1.4f * 287.05f * T);
+    }
+    t->pitch_rad = pitch; t->yaw_rad = yaw; t->roll_rad = -roll;
+    /* the counts: only between two flight frames of one flight (a pause, a menu, a mission change may jump) */
+    if (gap <= 30u && lmsl >= 0 && v->missiles < lmsl) tm_msl += (unsigned)(lmsl - v->missiles);
+    if (gap <= 30u && lspc >= 0 && v->special < lspc) tm_spc += (unsigned)(lspc - v->special);
+    lmsl = v->missiles; lspc = v->special;
+    u32 U = zero_vr_player_unit();
+    t->health_pct = -1.0f;
+    if (U >= 0x100000u && U < 0x2000000u) {
+        s32 hp = (s16)ps2_r16(U + 0x398u);
+        tm_last_hp = hp;
+        if (tm_hp_reset) { tm_hp_reset = 0; hp_max = 0; }
+        if (hp > hp_max) hp_max = hp;
+        t->health_pct = hp_max > 0 ? 100.0f * (float)(hp > 0 ? hp : 0) / (float)hp_max : -1.0f;
+    }
+    u32 ev = U ? ps2_r32(U + 0x200u) : 0u, hud = ps2_r32(player + 0x1600u);
+    u16 bt = ps2_pad_seen_buttons;
+    unsigned fl = 0u;
+    if (hud & 0x40000u) fl |= ZTF_STALL;
+    if (hud & 0x400000u) fl |= ZTF_PULL_UP;
+    if (ev & 0x100u) fl |= ZTF_LOCKED;
+    if (ev & 0x04000000u) fl |= ZTF_MISSILE_ALERT;
+    if ((bt & (3u << 10)) == (3u << 10)) fl |= ZTF_HIGH_G;      /* L1 + R1 */
+    if (ps2_r8(fm + 0x236u) & 1u) fl |= ZTF_ON_GROUND;
+    t->flags = fl;
+    t->gear = zero_syssnd_gear();
+    if (ps2_r32(player + 0x1A68u) & 0x2000u) t->state = ZT_CUTSCENE;     /* a mission event holds the camera */
+    else t->state = ZT_FLIGHT;
+    {   /* ACZ_DEBUG_TELEMETRY: the HUD's warning word when it changes (which warnings exist: STALL, PULL UP, ...?) */
+        static int dbg = -1; static u32 lh;
+        if (dbg < 0) { const char *e = getenv("ACZ_DEBUG_TELEMETRY"); dbg = e && *e && *e != '0'; }
+        if (dbg && hud != lh) {
+            ps2_log("telemetry: field %llu HUD warning word %08X -> %08X (speed %.0f kt, alt %.0f ft)", (unsigned long long)f, lh, hud,
+                    v->speed_kt, v->alt_ft);
+            lh = hud;
+        }
+    }
+}
 /* ---- ACZ_DEBUG_LOWFLY=agl_m[,from_field[,bank_deg]] (test only, bug #25): a crude terrain-following autopilot on
    the left stick for repeatable low passes: from that field on (default 900) it pitches towards agl_m metres above
    the ground under the aircraft (the game's own ground height query 0x158AE0, taken from its calls within 400 units
@@ -3707,9 +3852,21 @@ static int instr_hook(ps2_ctx *ctx, void *user) {
     }
     v.valid = 1;
     v.frame++;
-    pthread_mutex_lock(&z_instr_mx);
-    z_instr = v;
-    pthread_mutex_unlock(&z_instr_mx);
+    {   zero_telem tn;
+        struct timespec c0, c1;
+        static int dbg = -1;
+        if (dbg < 0) { const char *e = getenv("ACZ_DEBUG_TELEMETRY"); dbg = e && *e && *e != '0'; }
+        if (dbg) clock_gettime(CLOCK_MONOTONIC, &c0);
+        tm_frame(player, f, &v, pitch, yaw, roll, &tn);
+        if (dbg) {
+            clock_gettime(CLOCK_MONOTONIC, &c1);
+            tm_cpu_ns += (double)(c1.tv_sec - c0.tv_sec) * 1e9 + (double)(c1.tv_nsec - c0.tv_nsec); tm_cpu_n++;
+        }
+        pthread_mutex_lock(&z_instr_mx);
+        z_instr = v;
+        z_telem = tn;
+        pthread_mutex_unlock(&z_instr_mx);
+    }
     z_instr_field = f;
     {   extern volatile float ps2_imm_in[8];                /* canopy water inputs (ps2_video.c canopy_update) */
         extern volatile float ps2_imm_audio[8];
@@ -4078,9 +4235,18 @@ static void zb_save_poke(u32 s) {
         e = *q == ',' ? q + 1 : q;
     }
 }
+static volatile u32 zb_seq_now;           /* the game's newest sequence (setNext; the telemetry's state, the question) */
+static volatile u64 zb_seq_field;         /* the field it came */
+static volatile u32 zb_seq_ra;            /* the caller of that setNext */
 static int zb_setnext(ps2_ctx *ctx, void *user) {
     (void)user;
     u32 f = ctx->r[4].uw[0], ra = ctx->r[31].uw[0];
+    if (f && f != 0x00281128u) {                 /* (not "selector pops") */
+        if (f != zb_seq_now) zb_seq_field = ps2_kernel_vblank_count();
+        zb_seq_now = f;
+        zb_seq_ra = ra;
+        if (f == 0x00282BB8u) ps2_stats_mission_end("completed");   /* Debrief */
+    }
     if (zb_debug)
         ps2_log("zero-boot: setNext %08X %s from %08X depth %d field %llu", f, zb_name(f), ra,
                 (int)ps2_r32(0x003FCF64u), (unsigned long long)ps2_kernel_vblank_count());
@@ -4129,6 +4295,12 @@ static int zb_gc_enter(ps2_ctx *ctx, void *user) {
     u32 s = zb_slot();
     zero_in_mission = 1;
     zero_env_reload_mission(0);                  /* the NEXT MISSION tier: before the loader and the start view below */
+    tm_gc_field = ps2_kernel_vblank_count();
+    tm_aircraft = (int)ps2_r32(s + 0x24Cu);
+    tm_mission = (int)ps2_r32(s + 0x5F48u) + 1;
+    tm_hp_reset = 1;
+    tm_last_hp = 1;
+    ps2_stats_mission_begin(tm_mission, tm_aircraft);
     zv_armed = zv_mode;
     zv_ev_kept = 0xFFu;
     if (zr_log() > 0) {   /* the game's VIBRATION option: the mission init 0x1D1F00 sets the gate = (slot +0x5F70 == 0) */
@@ -4168,6 +4340,7 @@ static int zb_gc_enter(ps2_ctx *ctx, void *user) {
 }
 static int zb_gc_exit(ps2_ctx *ctx, void *user) {
     (void)ctx; (void)user; zero_in_mission = 0; zv_armed = 0;
+    ps2_stats_mission_end(tm_last_hp <= 0 ? "failed" : "left");      /* (Debrief, before or after this, says completed) */
     if (zb_skip_at) { ps2_log("zero-boot: intro skip: the mission ended before it was due"); zb_skip_at = 0; }
     return 0;
 }
@@ -6862,6 +7035,62 @@ static int zq_game_state(void) {
     if (zero_in_mission && zq_swg_menus && m && f - m <= 10u) return PS2_QUIT_GAME_MENU;
     return zero_in_mission ? PS2_QUIT_GAME_FLYING : PS2_QUIT_GAME_MENU;
 }
+/* The stream's state and copy (any thread; docs/TELEMETRY.md). In flight: the HUD manager ran within 8 fields, in this
+   mission. In a mission without it: the game's menus (the mission end), an intro flyby (the sky runs, the HUD does not)
+   or a load. Outside a mission: the sequence setNext asked for last. */
+static int tm_state(u64 f, int frame_state) {
+    extern volatile u64 zero_menus_last_field;
+    u64 p = zq_pause_field, m = zero_menus_last_field, i = z_instr_field, sk = tm_sky_field;
+    if (p && f - p <= 6u) return ZT_PAUSED;
+    if (zero_in_mission) {
+        if (i && i >= tm_gc_field && f - i <= 8u) return frame_state;
+        if (m && f - m <= 10u) return ZT_MENU;
+        return sk && sk >= tm_gc_field && f - sk <= 8u ? ZT_CUTSCENE : ZT_LOADING;
+    }
+    switch (zb_seq_now) {
+    case 0x00282B18u: case 0x00282868u: case 0x00282AC8u: return ZT_BRIEFING;   /* Briefing, BriefingMovie, MissionTitle */
+    case 0x00282A28u: case 0x00282A78u: return ZT_MOVIE;                        /* MoviePlay, CM */
+    default: return ZT_MENU;
+    }
+}
+int zero_telem_get(zero_telem *out) {
+    pthread_mutex_lock(&z_instr_mx);
+    *out = z_telem;
+    pthread_mutex_unlock(&z_instr_mx);
+    u64 f = ps2_kernel_vblank_count();
+    out->state = tm_state(f, out->state);
+    if (out->field < tm_gc_field) out->in.valid = 0;      /* the frame is another mission's */
+    out->publishing = out->in.valid && z_instr_field && f - z_instr_field <= 8u;
+    if (!out->publishing) out->field = f;                 /* (else the field of the published frame) */
+    if (f - tm_gun_f <= 12u && tm_gun_f) out->flags |= ZTF_GUN;
+    out->aircraft = tm_aircraft;
+    out->mission = tm_mission;
+    out->gun_shots = tm_gun; out->missiles_fired = tm_msl; out->specials_fired = tm_spc; out->hits_taken = tm_hits;
+    return out->state;
+}
+/* usage statistics (ps2_stats.c) */
+void zero_stats_retry(const char *result) {               /* z_mission_init: the attempt ended, the same mission again */
+    ps2_stats_mission_end(result);
+    ps2_stats_mission_begin(tm_mission, tm_aircraft);
+    tm_hp_reset = 1;
+    tm_last_hp = 1;
+}
+/* The question's moment, by what the screen shows (boot timeline 2026-11-04, game screenshots): the sequence zb_name calls "Title" is
+   first the logos and the licence page (from 0x2892B8, fields 61..1339 of a boot; never over those); "MainSelect" is the real title
+   screen, ACE COMBAT ZERO / PRESS START BUTTON (from field 1339): up for 1.5 s; "Title" again, from 0x2831C8 after Start, is the main menu
+   (for a player whose Start came before the question). No movie, logo or load is ever one of these. */
+static int zb_title_up(void) {
+    u32 s = zb_seq_now;
+    if (zero_in_mission) return 0;
+    if (s == 0x00281C38u) return ps2_kernel_vblank_count() - zb_seq_field >= 90u;
+    return s == 0x00281BE8u && zb_seq_ra == 0x002831C8u;
+}
+double zero_telem_cpu_us(void) {                          /* ACZ_DEBUG_TELEMETRY: tm_frame's mean since the last call */
+    double r = tm_cpu_n ? tm_cpu_ns / 1e3 / tm_cpu_n : 0.0;
+    tm_cpu_ns = 0.0; tm_cpu_n = 0;
+    return r;
+}
+
 static int zq_main_menu(int do_it) {
     if (zq_game_state() != PS2_QUIT_GAME_PAUSED || zq_qm_yes_id == 0xFFFFFFFFu) return 0;
     if (do_it) zq_mainmenu_req = 1;
@@ -6891,6 +7120,10 @@ static void zq_install(void) {
     }
     ps2_quit_set_game_state_fn(zq_game_state);
     ps2_enh_set_detail_fn(zq_detail_set);
+    {   extern void ps2_telem_set_source(int (*fn)(zero_telem *), double (*cpu)(void));
+        ps2_telem_set_source(zero_telem_get, zero_telem_cpu_us);
+        ps2_stats_set_title_fn(zb_title_up);
+    }
     /* the pause menu's update tells "paused"; the builders' first child allocation must be where it was found */
     static const struct { u32 a, w; } chk[] = {
         { ZQ_PAUSE_UPDATE, 0x27BDFFA0u }, { ZQ_ALLOC_CHILDREN, 0x27BDFFD0u }, { ZQ_TEXT, 0x27BDFFC0u },
@@ -7035,6 +7268,7 @@ void zero_vr_init(void) {
     vib_install();
     zero_boot_install();
     instr_install();
+    tm_install();                                       /* the telemetry stream's counters (ACZ_TELEMETRY) */
     zv_install();
     zg_install();
     ze_install();                                       /* light in tunnels: the sun and sky rays (bug #267) */

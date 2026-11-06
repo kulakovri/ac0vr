@@ -10,7 +10,7 @@ as before, still in `docs/ENV_REFERENCE.md`; nothing is lost.
 | Layer | What it holds | Where |
 |---|---|---|
 | 1. The launcher | the rows that need a restart anyway, before the engine boots, with PLAY | the game's window, before the boot (`ACZ_LAUNCHER`, below); its list is the QUALITY category and ACTIVE CONTROLLER |
-| 2. The page | 7 categories, none over 15 rows (CONTROLS 18 with a joystick and Touch), one vocabulary, one preset, one reset; most rows take effect at the next mission (below) | pause menu > ENHANCEMENTS, the title's OPTIONS > ENHANCEMENTS, View + Menu; F4 > Enhancements on the window |
+| 2. The page | 8 categories, none over 15 rows (CONTROLS 18 with a joystick and Touch), one vocabulary, one preset, one reset; most rows take effect at the next mission (below) | pause menu > ENHANCEMENTS, the title's OPTIONS > ENHANCEMENTS, View + Menu; F4 > Enhancements on the window |
 | 3. The ini | the expert keys (`[ini]` in the file's comment) | `build/zero/ac5_settings.ini`; F4 > Enhancements > Expert (ini) lists them for a desktop session with a mouse; the headset page never shows them |
 
 ENV_REFERENCE documents every switch (about 1580); the page shows the small part of them that a player tells apart.
@@ -19,17 +19,17 @@ ENV_REFERENCE documents every switch (about 1580); the page shows the small part
 
 | | Before (0d091ca) | After |
 |---|---|---|
-| Rows in the table | 128 | 141: 128 as before + 12 combo rows + MARKER SIZE BY RANGE (bug #316) |
-| Categories | 10 | 7 |
-| On the page, always | 126 | 73, of them 12 combo rows |
+| Rows in the table | 128 | 146: 128 as before + 12 combo rows + MARKER SIZE BY RANGE (bug #316) + the 2 telemetry rows (telem_udp) + the 3 usage statistics rows (stats_optin) |
+| Categories | 10 | 8 (SYSTEM since telem_udp) |
+| On the page, always | 126 | 78, of them 12 combo rows |
 | On the page, conditional | 2 (a joystick) | 12: 2 with a joystick, 10 once a Touch controller was seen |
 | ini only | 0 | 28 |
 | Single rows folded into combo rows | 0 | 28, into 12 rows (16 rows saved) |
-| When the page's rows apply (the 85 shown at most) | 25 now, 98 next start, 5 actions (all 128) | 20 now, 50 next mission, 10 next start, 5 actions |
-| When all 141 rows apply | - | 29 now, 75 next mission (+ TERRAIN LOOK's field), 32 next start, 5 actions |
+| When the page's rows apply (the 90 shown at most) | 25 now, 98 next start, 5 actions (all 128) | 23 now, 50 next mission, 10 next start, 7 actions |
+| When all 146 rows apply | - | 32 now, 75 next mission (+ TERRAIN LOOK's field), 32 next start, 7 actions |
 | Lines of `ac5_settings.ini` (the owner's) | 232 lines, `[enhancements]` 107 keys | 218 lines, `[enhancements]` 94 keys (after the first save) |
 
-Per category: QUALITY 8, PICTURE 12, COCKPIT 15, HUD 10, COMFORT 14, SOUND 8, CONTROLS 6 + 2 + 10.
+Per category: QUALITY 8, PICTURE 12, COCKPIT 15, HUD 10, COMFORT 14, SOUND 8, CONTROLS 6 + 2 + 10, SYSTEM 5 (the usage statistics, docs/PRIVACY.md, whose answer lives in `[privacy]`; the telemetry stream, docs/TELEMETRY.md).
 
 ## The vocabulary
 

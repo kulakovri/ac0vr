@@ -403,6 +403,12 @@ static float zs_test_brake(u64 f) {
     return -1.0f;
 }
 
+/* the gear model below for the telemetry stream (ps2_telem.c): 0 up .. 1 down; -1 when this file did not run lately
+   (ACZ_SND_SYSTEMS=0, or no flight frame) */
+float zero_syssnd_gear(void) {
+    u64 l = zs.last_f;
+    return l && ps2_kernel_vblank_count() - l <= 8u && !zs.gear_init ? zs.gear : -1.0f;
+}
 static float zs_mapv;                  /* the big map's button (action 0x10) as the HUD manager gets it (f12) */
 static void zs_update(u32 p, u64 f) {
     u64 t0 = zs_ticks();

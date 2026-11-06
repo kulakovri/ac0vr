@@ -59,6 +59,8 @@ After that the shortcut starts the game at once; there is no Bash, MSYS2 or emul
 
 **Updates.** At each start `ac0vr.exe` asks GitHub for the latest release (3 seconds at most; offline it just starts the game) and offers an update, with its notes. It is a small download, checked against `SHA256SUMS`, and usually a relink of a few seconds. `[update] check = 0` in `ac5_settings.ini` turns the question off. The Start menu's *ac0vr: another disc, a rebuild, updates* opens the same window by hand.
 
+**Statistics.** The first time the game reaches the title screen it asks whether you want to share usage statistics: the hardware, the settings, the missions flown, frame times and crash summaries, once a session, to the project's PostHog (EU). Nothing is sent before you answer, nothing if you say no, and never your name, your files or your IP address. Change it any time in pause > ENHANCEMENTS > SYSTEM > SEND USAGE STATISTICS; `docs/PRIVACY.md` lists every field.
+
 Everything from here on is the source route: for working on the code, not for playing.
 
 ## Build

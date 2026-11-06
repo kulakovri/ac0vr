@@ -319,7 +319,14 @@ void ps2_pad_script_add(u64 field, const char *button) {
     }
 }
 
+volatile u16 ps2_pad_seen_buttons;           /* port 0's buttons as the game's last read saw them (zero_vr.c: telemetry) */
+static u16 pad_buttons_read(int port, const ps2_pad_state *st);
 static u16 pad_buttons(int port, const ps2_pad_state *st) {
+    u16 b = pad_buttons_read(port, st);
+    if (port == 0) ps2_pad_seen_buttons = b;
+    return b;
+}
+static u16 pad_buttons_read(int port, const ps2_pad_state *st) {
     u16 buttons = st->buttons;
     {
         const char *h = getenv("PS2_HOLD");

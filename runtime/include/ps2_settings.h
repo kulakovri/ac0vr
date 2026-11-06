@@ -129,11 +129,11 @@ int  ps2_settings_take_dirty(void);
    switches keep their built-in defaults. The immersion and sound items are the existing F4 settings ([immersion],
    [graphics] realistic_terrain, [input] pad_layout) and work in every run. */
 enum { PS2_ENH_LIVE, PS2_ENH_MISSION, PS2_ENH_RESTART, PS2_ENH_ACTION };   /* when a change takes effect */
-/* the page's seven categories (docs/SETTINGS.md). An item's cat can also be PS2_ENH_CAT_INI (an expert key: in the file, set
+/* the page's eight categories (docs/SETTINGS.md; SYSTEM: the usage statistics and the telemetry stream, stats_optin, telem_udp). An item's cat can also be PS2_ENH_CAT_INI (an expert key: in the file, set
    at start as ever, listed by F4 > Enhancements > Expert (ini), never on the page) or PS2_ENH_CAT_OFF (listed nowhere: a
    combo row's member, a conditional row while its hardware is absent). */
 enum { PS2_ENH_QUALITY, PS2_ENH_PICTURE, PS2_ENH_COCKPIT, PS2_ENH_HUD, PS2_ENH_COMFORT, PS2_ENH_SOUND, PS2_ENH_CONTROLS,
-       PS2_ENH_CATS, PS2_ENH_CAT_INI = PS2_ENH_CATS, PS2_ENH_CAT_OFF };
+       PS2_ENH_SYSTEM, PS2_ENH_CATS, PS2_ENH_CAT_INI = PS2_ENH_CATS, PS2_ENH_CAT_OFF };
 #define PS2_ENH_CHOICES 6
 typedef struct ps2_enh_item {
     const char *key;                       /* [enhancements] key (cfg-backed items: their own section's key) */

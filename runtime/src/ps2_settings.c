@@ -1,5 +1,6 @@
 #include "ps2_runtime.h"
 #include "ps2_settings.h"
+#include "ps2_stats.h"                     /* [privacy], SEND USAGE STATISTICS (stats_optin) */
 #include "ps2_menv.h"                      /* the NEXT MISSION tier */
 #include "ps2_quit.h"                      /* the TOUCH CONTROLS card (ENHANCEMENTS > CONTROLS > SHOW TOUCH CONTROLS) */
 #include "ps2_hotas.h"                     /* [joystick:<GUID>] sections, the throttle lever rows */
@@ -420,6 +421,7 @@ static void settings_load_file(void) {
     pad_layout_seen = 0;
     enh_cx_file_reset();
     ps2_hotas_ini_reset();
+    ps2_stats_ini_reset();
     ps2_settings_defaults(&ps2_cfg);
     if (cfg_file_disabled) return;
     f = fopen(ps2_settings_path(), "r");
@@ -455,6 +457,10 @@ static void settings_load_file(void) {
         }
         if (!strcmp(section, "enhancements")) {    /* a combo row's key sets its cfg-backed members (below) */
             enh_cx_file_key(key, val);
+            continue;
+        }
+        if (!strcmp(section, "privacy")) {         /* the usage statistics' answer (ps2_stats.c keeps it) */
+            ps2_stats_ini_kv(key, val);
             continue;
         }
         if (!strncmp(section, "joystick:", 9)) {   /* a joystick profile, by GUID (ps2_hotas.c keeps the text) */
@@ -547,13 +553,14 @@ void ps2_settings_set_pad_layout(int layout) {
    a pad is saved by its name (a hand-written value of ACZ_PAD_ACTIVE), so it still means that pad after a replug or
    a restart, and stays shown while that pad is away (the automatic rule then decides).
    The layers (settings review 2026-11-05, docs/SETTINGS.md): a row stays on the page only if a player sees, hears or feels
-   the difference within ten seconds of flying AND two reasonable players would choose differently; the page has seven
-   categories (PS2_ENH_QUALITY ...). PS2_ENH_CAT_INI: an expert key: its line in the file, its switch set at start as
+   the difference within ten seconds of flying AND two reasonable players would choose differently; the page has eight
+   categories (PS2_ENH_QUALITY ... PS2_ENH_SYSTEM). PS2_ENH_CAT_INI: an expert key: its line in the file, its switch set at start as
    ever, listed by F4 > Enhancements > Expert (ini), never on the page. PS2_ENH_CAT_OFF: not listed at all: a combo row's
    member (K_COMBO, below the table), or a conditional row while its hardware is absent (ps2_enh_hotas_rows,
    ps2_enh_touch_rows).
    --------------------------------------------------------------------------------------------------------------- */
-enum { K_ENV, K_CFG_I, K_CFG_F, K_PATHS, K_ACT_RECENTRE, K_ACT_RESET, K_ACT_CARD, K_ACT_RUMBLE, K_ACT_NEUTRAL, K_PRESET, K_COMBO };
+enum { K_ENV, K_CFG_I, K_CFG_F, K_PATHS, K_ACT_RECENTRE, K_ACT_RESET, K_ACT_CARD, K_ACT_RUMBLE, K_ACT_NEUTRAL, K_PRESET, K_COMBO,
+       K_STATS, K_ACT_STATS_SHOW, K_ACT_STATS_RESET };
 /* perf6 placeholders (2026-11-04): the rows of switches other packages deliver without a row -- CLOUD DETAIL
    (perf6_clouds, ACZ_VR_CLOUD_DETAIL), CANOPY QUALITY (perf6_glassladder). Set to 1 when the switch exists (and check its
    values against the row and enh_preset_tab); until then the row is not on the page and the presets skip it. A package
@@ -565,7 +572,7 @@ enum { K_ENV, K_CFG_I, K_CFG_F, K_PATHS, K_ACT_RECENTRE, K_ACT_RESET, K_ACT_CARD
 #define ENH_HAVE_CANOPY_QUALITY 1
 #endif
 enum { L_NONE, L_CLOUD_SHADOW, L_GROUND_SHADOW, L_OPTICS, L_LOD, L_TDETAIL, L_PAD, L_PAD_ACTIVE, L_RUMBLE, L_TRIGGERS, L_HOTAS,
-       L_HAPTICS, L_TOUCH };
+       L_HAPTICS, L_TOUCH, L_TELEM_OUT, L_TELEM_FMT };
 typedef struct { ps2_enh_item it; size_t off; unsigned char live; } enh_row;
 
 #define V(...) { __VA_ARGS__ }
@@ -849,6 +856,23 @@ static enh_row enh_rows[] = {                /* (not const: ACTIVE CONTROLLER's 
     { { "touch_card", "", PS2_ENH_CONTROLS, PS2_ENH_ACTION, 1, 0, -1, K_ACT_CARD, "SHOW TOUCH CONTROLS",
         "Both Quest controllers and what each button does; also in the pause menu, or hold Menu 1 s in flight.",
         { "" }, { "PRESS A" }, { 0 } }, 0, L_NONE },
+    /* ---- SYSTEM: the usage statistics (stats_optin; ps2_stats.c, docs/PRIVACY.md: they live in [privacy], not in [enhancements],
+       and RESET ALL leaves them alone) and the telemetry stream for motion rigs and haptics (telem_udp; ps2_telem.c, docs/TELEMETRY.md) ---- */
+    { { "send_stats", "ACZ_STATS", PS2_ENH_SYSTEM, PS2_ENH_LIVE, 2, 1, -1, K_STATS, "SEND USAGE STATISTICS",
+        "Hardware, settings, missions flown and frame times, once a session; never your name, files or IP address.",
+        V("1", "0"), ON_OFF, { 0 } }, 0, L_NONE },
+    { { "stats_show", "", PS2_ENH_SYSTEM, PS2_ENH_ACTION, 1, 0, -1, K_ACT_STATS_SHOW, "SHOW WHAT IS SENT",
+        "The next document, exactly as it would be sent, a field per row.",
+        { "" }, { "PRESS A" }, { 0 } }, 0, L_NONE },
+    { { "stats_reset", "", PS2_ENH_SYSTEM, PS2_ENH_ACTION, 1, 0, -1, K_ACT_STATS_RESET, "RESET INSTALL ID",
+        "Replaces the random id that ties your sessions together; what was sent before no longer links to this PC.",
+        { "" }, { "PRESS A" }, { 0 } }, 0, L_NONE },
+    EI("telemetry_output", "ACZ_TELEMETRY", SYSTEM, LIVE, 3, 0, 0, "TELEMETRY OUTPUT",
+       "Flight data for motion rigs and haptics, 60 times a second, to port 20777 on this PC or your network only.",
+       V("", "127.0.0.1:20777", "255.255.255.255:20777"), V("OFF", "LOCAL", "LAN"), L_TELEM_OUT),
+    EI("telemetry_format", "ACZ_TELEMETRY_FORMAT", SYSTEM, LIVE, 2, 0, 0, "TELEMETRY FORMAT",
+       "JSON holds every value; FORZA is the Forza Data Out packet SimHub and haptics tools read without a plugin.",
+       V("", "forza"), V("JSON", "FORZA"), L_TELEM_FMT),
     /* ---- ini only (PS2_ENH_CAT_INI): their keys and injection as ever, F4 > Enhancements > Expert (ini), never the page ---- */
     EI("terrain_detail", "ACZ_TERRAIN_DETAIL", CAT_INI, LIVE, 2, 1, 0, "TERRAIN DETAIL",
        "The fine terrain mesh reaches twice as far, as in the PC version.",
@@ -1032,7 +1056,7 @@ static enh_row enh_rows[] = {                /* (not const: ACTIVE CONTROLLER's 
 #define ENH_N ((int)(sizeof enh_rows / sizeof enh_rows[0]))
 
 static const char *const enh_cat_names[PS2_ENH_CATS] = {
-    "QUALITY", "PICTURE", "COCKPIT", "HUD", "COMFORT", "SOUND", "CONTROLS" };
+    "QUALITY", "PICTURE", "COCKPIT", "HUD", "COMFORT", "SOUND", "CONTROLS", "SYSTEM" };
 static const char *enh_cat_helps[PS2_ENH_CATS] = {     /* (one line of both help fonts: ACZ_DEBUG_ENH, ACZ_DEBUG_PAUSE measure them) */
     "Preset, resolution, edges, clouds and movies.",
     "Aircraft, terrain, water, smoke, explosions.",
@@ -1040,7 +1064,8 @@ static const char *enh_cat_helps[PS2_ENH_CATS] = {     /* (one line of both help
     "HUD size and place, target arrow, boxes, gaze.",
     "G, buffet, hits, pilot sounds, depth, recentring.",
     "3D sound, Doppler, engine and cockpit sounds.",
-    "Controller, layout, vibration; joystick and Touch." };
+    "Controller, layout, vibration; joystick and Touch.",
+    "Usage statistics; flight data for motion rigs." };
 
 /* ---- K_COMBO: one page row for several switches (menu_1105a, the settings review of 2026-11-05) ----------------------
    A row of kind K_COMBO has no switch of its own. Its choices each set several member rows, by this sub-table, as
@@ -1566,6 +1591,7 @@ static void enh_autodetect(void) {
 
 int ps2_enh_choice(int i) {
     if (i < 0 || i >= ENH_N) return 0;
+    if (enh_rows[i].it.kind == K_STATS) return ps2_stats_saved_on() ? 0 : 1;   /* (ON, OFF; [privacy], not enh_saved) */
     if (enh_rows[i].live == L_PAD_ACTIVE && enh_saved[i] < 0) return enh_match(i, enh_raw[i]);   /* a pad: if there */
     return enh_is_cfg(i) ? enh_cfg_choice(i) : enh_saved[i];
 }
@@ -1651,6 +1677,7 @@ const char *ps2_enh_value_name(int i, char *buf, int n) {
         raw = c < 0 ? enh_ovr[i] : NULL;
     }
     if (!it) snprintf(buf, (size_t)n, "?");
+    else if (it->kind == K_STATS && !ps2_stats_available()) snprintf(buf, (size_t)n, "NOT AVAILABLE IN THIS BUILD");
     else if (!raw && enh_rows[i].live == L_PAD_ACTIVE && c == 0) {   /* AUTO: which one that is now */
         extern const char *ps2_video_pad_active_name(void);          /* ps2_video.c (NULL: none) */
         const char *a = ps2_video_pad_active_name();
@@ -1667,10 +1694,12 @@ const char *ps2_enh_value_name(int i, char *buf, int n) {
 }
 int ps2_enh_running(int i) {
     if (i < 0 || i >= ENH_N) return -1;
+    if (enh_rows[i].it.kind == K_STATS) return ps2_stats_saved_on() ? 0 : 1;
     return enh_is_cfg(i) ? enh_cfg_choice(i) : enh_run[i];
 }
 const char *ps2_enh_override(int i) {
     if (i < 0 || i >= ENH_N) return NULL;
+    if (enh_rows[i].it.kind == K_STATS) return ps2_stats_env_value();   /* ACZ_STATS=0|1 holds the row */
     if (enh_rows[i].it.kind == K_COMBO) {            /* any of its switches set in the environment holds it */
         int x = enh_row_cx[i];
         for (int j = 0; x >= 0 && j < enh_cx[x].nm; j++) {
@@ -1699,7 +1728,7 @@ int ps2_enh_pending(int i) {
         return 0;
     }
     if (i < 0 || i >= ENH_N || enh_member[i] || enh_is_cfg(i) || enh_rows[i].it.apply == PS2_ENH_ACTION || ps2_enh_override(i)
-        || enh_rows[i].it.kind == K_PRESET || enh_rows[i].live == L_PAD_ACTIVE)
+        || enh_rows[i].it.kind == K_PRESET || enh_rows[i].it.kind == K_STATS || enh_rows[i].live == L_PAD_ACTIVE)
         return 0;
     if (enh_mission[i]) return 0;                    /* (it waits for the next mission, not for a restart) */
     return enh_saved[i] < 0 || enh_saved[i] != enh_run[i];
@@ -2006,6 +2035,8 @@ extern void ps2_video_set_rumble_gain(float g);           /* ps2_video.c: < 0 au
 extern void ps2_video_set_triggers(float g);              /* ps2_video.c: ADAPTIVE TRIGGERS, 0 off */
 extern int ps2_video_rumble_test(void);                   /* ps2_video.c: TEST VIBRATION */
 extern void ps2_touch_set_haptics(float v);               /* ps2_touch.c: RUMBLE STRENGTH on Touch */
+extern void ps2_telem_set_target(const char *v);          /* ps2_telem.c: TELEMETRY OUTPUT */
+extern void ps2_telem_set_format(const char *v);          /* ps2_telem.c: TELEMETRY FORMAT */
 static float enh_num(int i, int c) {
     const char *v = c >= 0 ? enh_rows[i].it.val[c] : enh_raw[i];
     return *v ? (float)atof(v) : 1.0f;
@@ -2020,6 +2051,8 @@ static int enh_apply_live(int i) {
     case L_TRIGGERS: ps2_video_set_triggers(c >= 0 && r->it.val[c][0] ? (float)atof(r->it.val[c]) : 1.0f); break;
     case L_HOTAS: ps2_hotas_set_throttle(c >= 0 ? r->it.val[c] : enh_raw[i]); break;
     case L_HAPTICS: ps2_touch_set_haptics(c >= 0 && r->it.val[c][0] ? (float)atof(r->it.val[c]) : 0.5f); break;
+    case L_TELEM_OUT: ps2_telem_set_target(c >= 0 ? r->it.val[c] : enh_raw[i]); break;
+    case L_TELEM_FMT: ps2_telem_set_format(c >= 0 ? r->it.val[c] : enh_raw[i]); break;
     case L_CLOUD_SHADOW: if (ps2_clouds_toggle(3, on) < 0) return PS2_ENH_RESTART; break;
     case L_OPTICS: if (ps2_clouds_toggle(4, on) < 0) return PS2_ENH_RESTART; break;
     case L_GROUND_SHADOW: if (ps2_vk_gshadow_toggle(on) < 0) return PS2_ENH_RESTART; break;
@@ -2237,6 +2270,14 @@ int ps2_enh_set(int i, int c) {
     if (r->it.kind == K_ACT_CARD) { ps2_quit_touch_card_open(PS2_TC_FROM_ENH); return PS2_ENH_ACTION; }
     if (r->it.kind == K_ACT_RUMBLE) { ps2_video_rumble_test(); return PS2_ENH_ACTION; }   /* (its answer: the page) */
     if (r->it.kind == K_ACT_NEUTRAL) { ps2_hotas_neutral_now(); return PS2_ENH_ACTION; }  /* (its answer: the page) */
+    if (r->it.kind == K_ACT_STATS_SHOW) { ps2_stats_log_document(); return PS2_ENH_ACTION; }   /* (the page draws it: ps2_quit.c) */
+    if (r->it.kind == K_ACT_STATS_RESET) { ps2_stats_reset_id(); ps2_settings_save(); return PS2_ENH_ACTION; }
+    if (r->it.kind == K_STATS) {
+        if (!ps2_stats_available() || ps2_stats_env_value() || c < 0 || c > 1) return -1;
+        ps2_stats_set(c == 0);                   /* (ON, OFF) */
+        ps2_settings_save();
+        return PS2_ENH_LIVE;
+    }
     if (c < 0 || c >= r->it.n) return -1;
     if (r->it.kind == K_COMBO) {
         /* its members' values, saved; those that apply live do it now; held by the environment: no change at all */
@@ -2337,7 +2378,7 @@ void ps2_enh_reset_all(void) {
     }
     for (int i = 0; i < ENH_N; i++) {
         const enh_row *r = &enh_rows[i];
-        if (r->it.apply == PS2_ENH_ACTION || r->it.kind == K_PRESET || r->it.kind == K_COMBO) continue;
+        if (r->it.apply == PS2_ENH_ACTION || r->it.kind == K_PRESET || r->it.kind == K_COMBO || r->it.kind == K_STATS) continue;
         if (enh_is_cfg(i)) {
             if (r->live == L_PAD) ps2_settings_set_pad_layout((int)r->it.cfgv[r->it.def]);
             else if (!ps2_enh_override(i)) enh_cfg_put(i, r->it.cfgv[r->it.def]);
@@ -2656,6 +2697,7 @@ void ps2_settings_save(void) {
         else fprintf(f, "%-26s = %s\n", fd->key, val);
     }
     enh_write(f);
+    ps2_stats_ini_write(f);                     /* [privacy] */
     fprintf(f, "\n[keyboard]\n; action = primary secondary, as SDL scancodes (0 = unbound)\n");
     for (int a = 0; a < PS2_ACT_COUNT; a++)
         fprintf(f, "%-26s = %3d %3d    ; %s, %s\n", act_keys[a], ps2_cfg.key[a][0],
