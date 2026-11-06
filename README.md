@@ -47,7 +47,7 @@ export PATH=/c/msys64/ucrt64/bin:/c/msys64/usr/bin:$PATH
 
 ## Install
 
-**The way to play.** Download `ac0vr-0.1.0-setup.exe` from this repository's Releases and put it next to an ISO image of your own US disc (or tell it where the image or a folder with the disc's files is).
+**The way to play.** Download `ac0vr-0.1.x-setup.exe` from this repository's Releases and put it next to an ISO image of your own US disc (or tell it where the image or a folder with the disc's files is).
 
 1. **Windows may stop it:** the setup is not signed yet, so SmartScreen shows "Windows protected your PC". Click *More info*, then *Run anyway*.
 2. **The wizard:** the folder (`%LOCALAPPDATA%\Programs\ac0vr`, for your user only, no administrator rights), your disc (an image beside the setup is found by itself; the check reads the serial and a hash of the executable, and only the US disc passes), a desktop shortcut.
