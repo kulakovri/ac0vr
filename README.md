@@ -1,6 +1,6 @@
 # ac0vr
 
-**Version 0.1.0, an early build.** Tested on one PC and one headset so far. To play, see Install below; Build is the source route.
+**Version 0.1.x, an early build.** Tested on one PC and one headset so far. To play, see Install below; Build is the source route.
 
 A native PC recompilation of **Ace Combat Zero: The Belkan War** (PlayStation 2, US release, SLUS-21346) with virtual reality: you sit in a 3D
 cockpit and look around with your head. The game's code is translated to C ahead of time on your own machine and compiled together with
@@ -54,6 +54,8 @@ export PATH=/c/msys64/ucrt64/bin:/c/msys64/usr/bin:$PATH
 3. **The first start** builds the game from your disc, in a window with a progress bar: a minute or two on 8 threads, and only once. The result stays on your PC and the disc stays where it is: it is read while you play, never copied.
 
 The setup holds no assets. If you have a folder `ac0vr-assets`, keep it next to the setup and the wizard copies it in; without one the game runs from the HUD view, with the original movies and ground textures.
+Assets can be downloaded from https://mega.nz/file/7lBzHSZR#QBPItkNZrza5PjCsPH4QmxhI62v3uO1trxn4-ORKMaI
+
 
 After that the shortcut starts the game at once; there is no Bash, MSYS2 or emulator to deal with. Your saves, your settings and the log are in `build\zero\` of the install folder (`saves\`, `ac5_settings.ini`, `logs\`), and the uninstaller asks before it touches them.
 
