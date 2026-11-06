@@ -133,7 +133,7 @@ Any setting can be exported before the command; `docs/ENV_REFERENCE.md` lists th
 ## Cockpits
 
 The cockpit models are not in this repository: each file holds a model's meshes and textures, and most of them are GPL works of the FlightGear community. Download the **public cockpit set**
-(it will be attached to the first release on GitHub; not published yet; under 1 GB, with `LICENSES.md`: sources, authors, licences, the source offer) and unpack it into `cockpits/` next to this file. `cockpits/map.txt` says which aircraft flies with
+(not published yet: it will be attached to a later release on GitHub; under 1 GB, with `LICENSES.md`: sources, authors, licences, the source offer) and unpack it into `cockpits/` next to this file. `cockpits/map.txt` says which aircraft flies with
 which model; `docs/aircraft_ids/README.md` lists them. 15 aircraft have their own cockpit, 19 borrow the nearest relative's, the Tornado and the YF-23A get the T-38 for now. Better ones will replace them
 as models of our own are built.
 
