@@ -12370,6 +12370,52 @@ static void cpit_controls(float *v, const zero_instr *in) {
     v[CPIT_P_ELEV] = el; v[CPIT_P_AIL] = ai; v[CPIT_P_RUD] = rud; v[CPIT_P_THR] = thr;
 }
 /* this frame's instrument values (FlightGear conventions) */
+/* Engine gauges from the game's power (bug #326, 2026-11-06; the owner in the T-38, M1: "two indicators in front of
+   me were going crazy, no idea why"): the game's power FM+0x404 is a spring-loaded pressure input (idle 0, cruise 0.38,
+   military 0.95 of the lever: cpit_controls) that steps with the button, and the gauges followed it in the same frame:
+   the T-38's two tachometers (N1 = 65 + 35 power + 4 afterburner) jumped 20-35 % at every press and release, and their
+   four-digit drums (the last one a digit per 0.1 %) spun through hundreds of digits in one frame, a blur, at every touch
+   of the trigger. A real turbojet spools: the J85 takes about 4 s from idle to military. Here N1 follows the command
+   through a first-order lag whose time constant depends on where it is (1.5 s near idle, 1.0 s near military; 1.4 x on
+   the way down), EGT follows the engine's own N1 with a thermal lag (0.6 s) plus a transient rise while the fuel control
+   accelerates it (up to +180 F for the full command gap: the EGT leads the tachometer, as on the real gauges), fuel
+   flow is the fuel control's own (0.3 s; 60 % with the engine, 40 % with the command: it leads the rpm), oil pressure
+   the gearbox pump's (0.4 s with N1). The drums then roll like counters. ACZ_VR_COCKPIT_ENGINE_LAG = 1 (default: this
+   model), 0 = as before (the gauges step with the button), k = the time constants scaled by k. ACZ_DEBUG_CPIT_ENGINE=N
+   logs the command and the four gauges every N frames (`cpit-engine:`). */
+static void cpit_engine(float pw, float ab, float *v) {
+    static float k = -1.0f, n1 = -1.0f, egt, ff, oil;
+    static u64 last; static int dbg; static u32 nlog;
+    if (k < 0.0f) {
+        const char *e = getenv("ACZ_VR_COCKPIT_ENGINE_LAG");
+        k = e && *e ? (float)atof(e) : 1.0f;
+        if (!(k >= 0.0f)) k = 1.0f;
+        if (k > 10.0f) k = 10.0f;
+        e = getenv("ACZ_DEBUG_CPIT_ENGINE"); dbg = e ? atoi(e) : 0;
+    }
+    float n1_t = 65.0f + 35.0f * pw + 4.0f * ab;             /* the command's N1 (%) */
+    u64 now = vk_mono_ns();
+    float dt = last ? (float)((double)(now - last) * 1e-9) : 1e9f;
+    last = now;
+    if (k <= 0.0f || n1 < 0.0f || dt > 0.5f) {              /* off, the first frame or after a pause: at the command */
+        n1 = n1_t; egt = 752.0f + 432.0f * pw + 40.0f * ab; ff = 80.0f + 260.0f * pw + 700.0f * ab; oil = 25.0f + 20.0f * pw;
+    } else {
+        float x = (n1 - 65.0f) / 35.0f; x = x < 0.0f ? 0.0f : x > 1.0f ? 1.0f : x;
+        float tau = (1.5f - 0.5f * x) * (n1_t > n1 ? 1.0f : 1.4f) * k;
+        n1 += (n1_t - n1) * (1.0f - expf(-dt / tau));
+        float pe = (n1 - 65.0f) / 35.0f; pe = pe < 0.0f ? 0.0f : pe > 1.0f ? 1.0f : pe;    /* the engine's own power */
+        float gap = pw - pe; if (gap < 0.0f) gap = 0.0f;   /* the fuel control accelerating it */
+        egt += (752.0f + 432.0f * pe + 40.0f * ab + 180.0f * gap - egt) * (1.0f - expf(-dt / (0.6f * k)));
+        ff += (80.0f + 260.0f * (0.6f * pe + 0.4f * pw) + 700.0f * ab - ff) * (1.0f - expf(-dt / (0.3f * k)));
+        oil += (25.0f + 20.0f * pe - oil) * (1.0f - expf(-dt / (0.4f * k)));
+    }
+    v[CPIT_P_RPM] = n1; v[CPIT_P_EGT] = egt; v[CPIT_P_FF] = ff; v[CPIT_P_OILP] = oil;
+    v[CPIT_P_EGT_C] = (egt - 32.0f) / 1.8f;                /* the same in other units (F-15 gauges) */
+    v[CPIT_P_FF_PPH] = ff * 6.5f;
+    if (dbg > 0 && (nlog++ % (u32)dbg) == 0u)
+        ps2_log("cpit-engine: power %.3f afterburner %.2f -> N1 %.1f %% (command %.1f) EGT %.0f F fuel flow %.0f gal/h "
+                "oil %.1f psi (lag x%.2f, dt %.1f ms)", pw, ab, n1, n1_t, egt, ff, oil, k, dt * 1e3f);
+}
 static void cpit_values(float *v) {
     zero_instr in;
     static float gmin = 1.0f, gmax = 1.0f;
@@ -12394,15 +12440,12 @@ static void cpit_values(float *v) {
     v[CPIT_P_PITCH] = in.pitch_deg;
     v[CPIT_P_ROLL] = -in.roll_deg;                    /* the game's roll decreases in a right bank */
     v[CPIT_P_HDG] = in.heading_deg;
-    float pw = in.throttle < 0.0f ? 0.0f : in.throttle > 1.0f ? 1.0f : in.throttle;
-    v[CPIT_P_RPM] = 65.0f + 35.0f * pw + 4.0f * in.afterburner;
-    /* J85 engine gauges from the throttle: EGT ~400 C idle to ~640 C military, fuel flow ~80 to ~340 gal/h (about
-       three times that in afterburner), oil pressure 25 to 45 psi */
-    v[CPIT_P_EGT] = 752.0f + 432.0f * pw + 40.0f * in.afterburner;
-    v[CPIT_P_FF] = 80.0f + 260.0f * pw + 700.0f * in.afterburner;
-    v[CPIT_P_OILP] = 25.0f + 20.0f * pw;
-    v[CPIT_P_EGT_C] = (v[CPIT_P_EGT] - 32.0f) / 1.8f;      /* the same in other units (F-15 gauges) */
-    v[CPIT_P_FF_PPH] = v[CPIT_P_FF] * 6.5f;
+    {   /* J85 engine gauges from the power: EGT ~400 C idle to ~640 C military, fuel flow ~80 to ~340 gal/h (about
+           three times that in afterburner), oil pressure 25 to 45 psi; through the engine's spool (cpit_engine) */
+        float pw = in.throttle < 0.0f ? 0.0f : in.throttle > 1.0f ? 1.0f : in.throttle;
+        float ab = in.afterburner < 0.0f ? 0.0f : in.afterburner > 1.0f ? 1.0f : in.afterburner;
+        cpit_engine(pw, ab, v);
+    }
     {   /* buffet shakes the needles (wish #81, ACZ_IMM_BUFFET needles): the accelerometer +-0.35 G, AoA +-1.2 deg, VSI
            +-350 fpm, airspeed +-2.5 kt, altimeter +-12 ft at full buffet, ~12 Hz; not the attitude ball (a gyro), not
            the G-meter's max / min hands */

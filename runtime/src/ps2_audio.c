@@ -112,8 +112,11 @@ static struct {
        side), the snowfall's slow density wander, grains and clumps (bursts through their own filters) */
     float sn_k, sn_g, sn_mod, sn_modv;
     float sn_hp[3], sn_l1[3], sn_l2[3];
-    struct { float env, dec, amp, pan, hp, lp, lpa; u32 nz; } sn_b[12];
+    struct { float env, dec, amp, pan, hp, lp, lpa; u32 nz; float c, r2, kin, y1, y2, att; int rise; } sn_b[12];
     u32 dbg_sgrain, dbg_sclump; float dbg_sn_max;
+    /* glass (ACZ_IMM_SNOW_STYLE, bug #327): the style, its level, the slow curtains of snow (a second walk), children
+       of grains due (s) */
+    int sn_style; float sn_lvl, sn_mod2, sn_mod2v, sn_kid[8], sn_l3[3];
 } imm;
 /* Snow on the canopy (ACZ_IMM_SNOW_SOUND, fx_debris 2026-10-31, bug #260: M1 10:49:03 "there should be a sound from the
    snow"). Before, snow only thinned the rain patter: ~34 ticks a second at M1's snowfall (0.45) and 320 kt, 0.007-0.037
@@ -128,7 +131,16 @@ static struct {
    the beds' ducking in dB (a sound on the glass, as the rain patter, not a bed of air; the full bed ducking took it 6-9 dB
    under M1's game). Sim M1 (snowfall 0.45, 324 kt; the game's own mix -25 dBFS in this band, -18.7 in all): first
    version -43.7 dBFS in 1.4-6.5 kHz (20 dB under the game there: not heard); now ~-33.
-   Level 0..2 (1; 0 = as before: only the thinned patter). */
+   Level 0..2 (1; 0 = as before: only the thinned patter).
+   2026-11-06 (bug #327; the owner after M1 in the T-38: "the snow is too loud, there is no feeling of being behind the
+   glass, it sounds mechanical"): ACZ_IMM_SNOW_STYLE=glass (default) remakes it as heard through 15 mm of acrylic and a
+   helmet with earcups: the canopy's mass law takes about 6 dB more an octave going up and the helmet's cups 40-50 dB
+   above 2 kHz, so what is left inside is low-mid, a texture under the engine, not a bright hiss. The hiss is 0.5-2.6
+   kHz (18 dB an octave above) and nearly mono (a sound through the glass all round, not from a point); the grains are
+   noise through a resonator at 500-1500 Hz, 4-12 ms; the clumps the plate's own dull pats at 250-700 Hz, 15-40 ms
+   with a 2.5 ms rise; the rate is a clustered process (the density's walk +-60 %, a second walk over seconds for
+   curtains and lulls shared by the hiss and the grains, a quarter of the grains with 1-3 children within 5-30 ms), not
+   a metronome; half the level. `dry` = the 10-31 sound above. Measured in NOTES 2026-11-06. */
 static u32 imm_rand(void) { imm.rng ^= imm.rng << 13; imm.rng ^= imm.rng >> 17; imm.rng ^= imm.rng << 5; return imm.rng; }
 static float imm_frand(void) { return (float)(imm_rand() >> 8) * (1.0f / 16777216.0f); }
 u64 ps2_kernel_vblank_count(void);
@@ -726,6 +738,8 @@ static void imm_mix(s16 *buf, int frames) {
         if (e && !strcmp(e, "off")) imm.sn_k = 0.0f;
         if (!(imm.sn_k >= 0.0f)) imm.sn_k = 0.0f;
         if (imm.sn_k > 2.0f) imm.sn_k = 2.0f;
+        e = getenv("ACZ_IMM_SNOW_STYLE"); imm.sn_style = !(e && !strcmp(e, "dry"));
+        imm.sn_lvl = imm.sn_style ? 0.5f : 1.0f;
     }
     {   extern float ps2_imm_sound(void);
         imm.gain = ps2_imm_sound();
@@ -787,7 +801,9 @@ static void imm_mix(s16 *buf, int frames) {
         extern float ps2_imm_duck(int cls);
         t_sn = run * snow * imm.sn_k * (0.25f + 0.75f * powf(spd, 1.3f)) * sqrtf(ps2_imm_duck(0));   /* (half the beds' dB) */
     }
-    const float sn_ah = 1.0f - expf(-6.2831853f * 1400.0f * dt), sn_al = 1.0f - expf(-6.2831853f * 6500.0f * dt);
+    const float sn_ah = 1.0f - expf(-6.2831853f * (imm.sn_style ? 500.0f : 1400.0f) * dt),
+                sn_al = 1.0f - expf(-6.2831853f * (imm.sn_style ? 2600.0f : 6500.0f) * dt),
+                sn_bl = 1.0f - expf(-6.2831853f * 2500.0f * dt);     /* glass: the bursts' top, as the hiss's */
     const float sn_kg = 1.0f - expf(-dt / 0.4f);
     float fc = 300.0f + 900.0f * cloud + 600.0f * spd;          /* airflow low-pass corner (Hz) */
     float a1 = 1.0f - expf(-6.2831853f * fc * dt), a2 = 1.0f - expf(-6.2831853f * fc * 0.5f * dt);
@@ -804,38 +820,83 @@ static void imm_mix(s16 *buf, int frames) {
         imm.g_drip += (t_drip - imm.g_drip) * k_dn;
         float l = 0.0f, r = 0.0f;
         imm.sn_g += (t_sn - imm.sn_g) * sn_kg;
-        if (imm.sn_g > 1e-4f) {                         /* snow on the canopy (ACZ_IMM_SNOW_SOUND, bug #260) */
-            /* the density's slow wander: a smoothed random walk, 0.3-1.5 Hz */
+        if (imm.sn_g > 1e-4f) {                         /* snow on the canopy (ACZ_IMM_SNOW_SOUND, bugs #260, #327) */
+            const int gl = imm.sn_style;                /* 1 glass (2026-11-06), 0 dry (2026-10-31) */
+            /* the density's slow wander: a smoothed random walk, 0.3-1.5 Hz (+-35 %; glass +-60 %), and in glass a
+               second, slower one (seconds: curtains of snow, lulls down to a tenth) that the hiss and the grains share */
             imm.sn_modv += ((imm_frand() * 2.0f - 1.0f) * 6.0f - imm.sn_modv) * 2.0e-4f;
             imm.sn_mod += imm.sn_modv * dt;
-            if (imm.sn_mod > 0.35f) { imm.sn_mod = 0.35f; imm.sn_modv = -fabsf(imm.sn_modv); }
-            if (imm.sn_mod < -0.35f) { imm.sn_mod = -0.35f; imm.sn_modv = fabsf(imm.sn_modv); }
-            float g = imm.sn_g * (1.0f + imm.sn_mod);
-            /* the hiss: three band-limited noises -- [0] from ahead (both ears), [1] / [2] each side's own */
+            {   float lim = gl ? 0.6f : 0.35f;
+                if (imm.sn_mod > lim) { imm.sn_mod = lim; imm.sn_modv = -fabsf(imm.sn_modv); }
+                if (imm.sn_mod < -lim) { imm.sn_mod = -lim; imm.sn_modv = fabsf(imm.sn_modv); }
+            }
+            float m = 1.0f + imm.sn_mod;
+            if (gl) {
+                imm.sn_mod2v += ((imm_frand() * 2.0f - 1.0f) * 1.2f - imm.sn_mod2v) * 2.0e-5f;
+                imm.sn_mod2 += imm.sn_mod2v * dt;
+                if (imm.sn_mod2 > 0.5f) { imm.sn_mod2 = 0.5f; imm.sn_mod2v = -fabsf(imm.sn_mod2v); }
+                if (imm.sn_mod2 < -0.8f) { imm.sn_mod2 = -0.8f; imm.sn_mod2v = fabsf(imm.sn_mod2v); }
+                m *= 1.0f + imm.sn_mod2;
+                if (m < 0.1f) m = 0.1f;
+            }
+            float g = imm.sn_g * m * imm.sn_lvl;
+            /* the hiss: three band-limited noises -- [0] from ahead (both ears), [1] / [2] each side's own; dry 1.4-6.5
+               kHz, glass 0.5-2.6 kHz (18 dB an octave above: the canopy's mass and the helmet take the top) and nearly
+               mono */
             float hs[3];
             for (int c = 0; c < 3; c++) {
                 float w = imm_frand() * 2.0f - 1.0f;
                 float y = w - imm.sn_hp[c]; imm.sn_hp[c] += (w - imm.sn_hp[c]) * sn_ah;
                 imm.sn_l1[c] += (y - imm.sn_l1[c]) * sn_al; imm.sn_l2[c] += (imm.sn_l1[c] - imm.sn_l2[c]) * sn_al;
                 hs[c] = imm.sn_l2[c];
+                if (gl) { imm.sn_l3[c] += (imm.sn_l2[c] - imm.sn_l3[c]) * sn_al; hs[c] = imm.sn_l3[c]; }   /* 18 dB an octave */
             }
-            l += (hs[0] * 0.75f + hs[1] * 0.45f) * 0.55f * g;
-            r += (hs[0] * 0.75f + hs[2] * 0.45f) * 0.55f * g;
-            /* grains (the sandy texture) and clumps (soft tuks): new bursts */
-            float gr = 400.0f * imm.sn_g, cr = 6.0f + 18.0f * imm.sn_g;
+            if (gl) { l += (hs[0] * 0.85f + hs[1] * 0.25f) * 0.9f * g; r += (hs[0] * 0.85f + hs[2] * 0.25f) * 0.9f * g; }
+            else { l += (hs[0] * 0.75f + hs[1] * 0.45f) * 0.55f * g; r += (hs[0] * 0.75f + hs[2] * 0.45f) * 0.55f * g; }
+            /* grains (the sandy texture) and clumps (soft tuks): new bursts. Dry: a constant rate. Glass: the rate
+               follows the density, and a grain has children (a quarter of them 1-3 more within 5-30 ms: a splatter,
+               not a metronome) */
+            float gr = gl ? 260.0f * imm.sn_g * m : 400.0f * imm.sn_g;
+            float cr = gl ? (4.0f + 12.0f * imm.sn_g) * m : 6.0f + 18.0f * imm.sn_g;
             int nb = -1;
             float u = imm_frand();
             if (u < gr * dt) nb = 0; else if (u < (gr + cr) * dt) nb = 1;
+            if (gl)
+                for (int j = 0; j < 8; j++)
+                    if (imm.sn_kid[j] > 0.0f) {
+                        imm.sn_kid[j] -= dt;
+                        if (imm.sn_kid[j] <= 0.0f) { if (nb < 0) { nb = 0; imm.sn_kid[j] = 0.0f; } else imm.sn_kid[j] = 1e-5f; }
+                    }
             if (nb >= 0)
                 for (int j = 0; j < 12; j++)
                     if (imm.sn_b[j].env <= 0.0f) {
                         float a = imm_frand();
-                        imm.sn_b[j].env = 1.0f;
-                        imm.sn_b[j].dec = expf(-dt / (nb ? 0.003f + 0.004f * imm_frand() : 0.0005f + 0.0009f * imm_frand()));
-                        imm.sn_b[j].amp = (nb ? 0.10f + 0.14f * a * a : 0.04f + 0.12f * a * a * a) * g;
-                        imm.sn_b[j].pan = 0.5f + (imm_frand() - 0.5f) * 0.7f;
-                        imm.sn_b[j].lpa = nb ? 1.0f - expf(-6.2831853f * (1200.0f + 2000.0f * imm_frand()) * dt) : 1.0f;
+                        imm.sn_b[j].env = 1.0f; imm.sn_b[j].rise = 0;
+                        imm.sn_b[j].pan = 0.5f + (imm_frand() - 0.5f) * (gl ? 0.4f : 0.7f);
                         imm.sn_b[j].hp = imm.sn_b[j].lp = 0.0f; imm.sn_b[j].nz = imm_rand() | 1u;
+                        if (gl) {
+                            /* noise through a resonator: a grain 4-12 ms at 500-1500 Hz, a clump 15-40 ms at 250-700 Hz
+                               with a 2.5 ms rise (the plate's own dull pat); sizes by a power law */
+                            float f0 = nb ? 250.0f * powf(2.8f, imm_frand()) : 500.0f * powf(3.0f, imm_frand());
+                            float ring = nb ? 0.008f + 0.012f * imm_frand() : 0.003f + 0.005f * imm_frand();
+                            float rr = expf(-dt / ring), w = 6.2831853f * f0 * dt;
+                            imm.sn_b[j].c = 2.0f * rr * cosf(w); imm.sn_b[j].r2 = rr * rr;
+                            imm.sn_b[j].kin = (1.0f - rr) * 2.0f * sinf(w);
+                            imm.sn_b[j].y1 = imm.sn_b[j].y2 = 0.0f;
+                            imm.sn_b[j].dec = expf(-dt / (nb ? 0.015f + 0.025f * imm_frand() : 0.004f + 0.008f * imm_frand()));
+                            imm.sn_b[j].att = 1.0f / (0.0025f * (float)AUDIO_RATE);
+                            if (nb) { imm.sn_b[j].env = 0.001f; imm.sn_b[j].rise = 1; }
+                            imm.sn_b[j].amp = (nb ? 0.12f + 0.16f * a * a : 0.05f + 0.14f * a * a * a) * g;
+                            if (!nb && imm_frand() < 0.25f) {          /* children */
+                                int n = 1 + (int)(imm_frand() * 3.0f);
+                                for (int q = 0; q < 8 && n > 0; q++)
+                                    if (imm.sn_kid[q] <= 0.0f) { imm.sn_kid[q] = 0.005f + 0.025f * imm_frand(); n--; }
+                            }
+                        } else {
+                            imm.sn_b[j].dec = expf(-dt / (nb ? 0.003f + 0.004f * imm_frand() : 0.0005f + 0.0009f * imm_frand()));
+                            imm.sn_b[j].amp = (nb ? 0.10f + 0.14f * a * a : 0.04f + 0.12f * a * a * a) * g;
+                            imm.sn_b[j].lpa = nb ? 1.0f - expf(-6.2831853f * (1200.0f + 2000.0f * imm_frand()) * dt) : 1.0f;
+                        }
                         if (nb) imm.dbg_sclump++; else imm.dbg_sgrain++;
                         break;
                     }
@@ -844,11 +905,25 @@ static void imm_mix(s16 *buf, int frames) {
                 u32 *z = &imm.sn_b[j].nz;
                 *z ^= *z << 13; *z ^= *z >> 17; *z ^= *z << 5;
                 float w = ((float)(*z >> 8) * (2.0f / 16777216.0f) - 1.0f) * imm.sn_b[j].env * imm.sn_b[j].amp;
-                float y = w - imm.sn_b[j].hp; imm.sn_b[j].hp += (w - imm.sn_b[j].hp) * sn_ah;
-                imm.sn_b[j].lp += (y - imm.sn_b[j].lp) * imm.sn_b[j].lpa;
-                l += imm.sn_b[j].lp * (1.0f - imm.sn_b[j].pan) * 1.4f; r += imm.sn_b[j].lp * imm.sn_b[j].pan * 1.4f;
-                imm.sn_b[j].env *= imm.sn_b[j].dec;
-                if (imm.sn_b[j].env < 0.02f) imm.sn_b[j].env = 0.0f;
+                float o;
+                if (gl) {
+                    float y = imm.sn_b[j].kin * w + imm.sn_b[j].c * imm.sn_b[j].y1 - imm.sn_b[j].r2 * imm.sn_b[j].y2;
+                    imm.sn_b[j].y2 = imm.sn_b[j].y1; imm.sn_b[j].y1 = y;
+                    imm.sn_b[j].lp += (y - imm.sn_b[j].lp) * sn_bl;
+                    o = imm.sn_b[j].lp;
+                } else {
+                    float y = w - imm.sn_b[j].hp; imm.sn_b[j].hp += (w - imm.sn_b[j].hp) * sn_ah;
+                    imm.sn_b[j].lp += (y - imm.sn_b[j].lp) * imm.sn_b[j].lpa;
+                    o = imm.sn_b[j].lp;
+                }
+                l += o * (1.0f - imm.sn_b[j].pan) * 1.4f; r += o * imm.sn_b[j].pan * 1.4f;
+                if (imm.sn_b[j].rise) {
+                    imm.sn_b[j].env += imm.sn_b[j].att;
+                    if (imm.sn_b[j].env >= 1.0f) { imm.sn_b[j].env = 1.0f; imm.sn_b[j].rise = 0; }
+                } else {
+                    imm.sn_b[j].env *= imm.sn_b[j].dec;
+                    if (imm.sn_b[j].env < 0.02f) imm.sn_b[j].env = 0.0f;
+                }
             }
             if (imm.sn_g > imm.dbg_sn_max) imm.dbg_sn_max = imm.sn_g;
         }
@@ -930,10 +1005,10 @@ static void imm_mix(s16 *buf, int frames) {
     if (imm.dbg > 0 && (imm.dbg_n += (u32)frames) >= (u32)imm.dbg * AUDIO_RATE) {
         ps2_log("imm-sound: field %llu run %.0f cloud %.2f rain %.2f snow %.2f kt %.0f | g_air %.2f g_rain %.2f g_snow %.2f "
                 "g_drip %.2f | %u drops, whoosh in %u out %u, debris %u, debris zips %u hits %u bed clicks %u (bed max %.2f) | "
-                "snow on the canopy %.2f (max), %u grains, %u clumps in %d s",
+                "snow on the canopy %.2f (max), %u grains, %u clumps in %d s (%s)",
                 (unsigned long long)ps2_kernel_vblank_count(), run, cloud, rain, snow, kt, imm.g_air, imm.g_rain, imm.g_snow,
                 imm.g_drip, imm.dbg_drops, imm.dbg_win, imm.dbg_wout, imm.dbg_deb, db.n_zip, db.n_hit, db.n_bedtick, db.bed_max,
-                imm.dbg_sn_max, imm.dbg_sgrain, imm.dbg_sclump, imm.dbg);
+                imm.dbg_sn_max, imm.dbg_sgrain, imm.dbg_sclump, imm.dbg, imm.sn_style ? "glass" : "dry");
         imm.dbg_sn_max = 0.0f; imm.dbg_sgrain = imm.dbg_sclump = 0;
         imm.dbg_n = imm.dbg_drops = imm.dbg_win = imm.dbg_wout = imm.dbg_deb = 0;
         db.n_zip = db.n_hit = db.n_bedtick = 0; db.bed_max = 0.0f;
