@@ -1,6 +1,6 @@
 # Environment variable reference
 
-Every environment variable that the Ace Combat Zero recompilation runtime (`build/zero/ac5.exe`, built from `runtime/`) and the launcher scripts at the repository root read, collected from the source on 2026-11-06. Line numbers point at the place where each variable is read and will drift as the code changes.
+Every environment variable that the Ace Combat Zero recompilation runtime (`build/zero/ac5.exe`, built from `runtime/`) and the launcher scripts at the repository root read, collected from the source on 2026-11-07. Line numbers point at the place where each variable is read and will drift as the code changes.
 
 ## How the variables are used
 

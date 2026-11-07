@@ -1,6 +1,6 @@
 # ac0vr
 
-**Version 0.1.x, an early build.** Tested on one PC and one headset so far. To play, see Install below; Build is the source route.
+**Version 0.1.x, an early build.** Tested on one PC and one headset so far. To play, follow the four steps below; everything from Build on is the source route, for working on the code.
 
 A native PC recompilation of **Ace Combat Zero: The Belkan War** (PlayStation 2, US release, SLUS-21346) with virtual reality: you sit in a 3D
 cockpit and look around with your head. The game's code is translated to C ahead of time on your own machine and compiled together with
@@ -11,6 +11,19 @@ controllers). No emulator runs while you play.
 own disc: the recompiler reads the executable on it, and the game loads everything else from it while you play. The installer holds no game either: it builds the game on your PC from your disc. This is a free
 fan project, not affiliated with or endorsed by Bandai Namco Entertainment or Sony Interactive Entertainment. It unlocks nothing and sells
 nothing.
+
+## Play it in four steps
+
+You need your own US disc of the game. Nothing of the game is in these files: the setup builds the game on your PC from your disc.
+
+1. **Download the installer.** On the [Releases page](../../releases/latest), take `ac0vr-0.1.x-setup.exe` (about 50 MB) and put it in a new, empty folder.
+2. **Put your disc image next to it.** An ISO image of your own *Ace Combat Zero: The Belkan War* disc, US version (SLUS-21346), in the same folder. A DVD drive and a free tool such as ImgBurn make the image from the disc; a folder with the disc's files works too, the wizard asks where it is. Other regions do not work.
+3. **Optional: the asset pack.** [Download it here](https://mega.nz/file/7lBzHSZR#QBPItkNZrza5PjCsPH4QmxhI62v3uO1trxn4-ORKMaI) (about 9 GB: 3D cockpits, upscaled movies and ground textures), unpack it, and put its folder `ac0vr-assets` next to the setup. This pack is not made by this project and is not part of it: it is a third-party collection that happens to fit, offered without any warranty or responsibility; use it at your own risk. Without it the game runs from its own view with the original movies, and you can add the pack later by running the setup again with the folder beside it.
+4. **Run the setup.** Windows may say "Windows protected your PC" because the setup is not signed yet: click *More info*, then *Run anyway*. Click through the wizard; it finds the disc image by itself. The first start builds the game, once, in a window with a progress bar (a minute or two), then press PLAY.
+
+From then on the desktop shortcut starts the game. Have the headset ready before PLAY (Quest: Link or Air Link running); without a headset the game runs in a window. When a new release is out, the game offers it at the start and updates itself in a few seconds. The first title screen asks, once, whether you want to share usage statistics; no is a fine answer.
+
+**What you need:** Windows 10 or 11, 64-bit; a PC VR headset with an OpenXR runtime (a Meta Quest over Link or Air Link, or another PC headset); a strong GPU with a Vulkan driver (everything so far was tuned on an RTX 3090 Ti, and the default look uses most of it: on less, lower the resolution in ENHANCEMENTS > QUALITY); an Xbox or PlayStation gamepad.
 
 ## What it does
 
@@ -45,17 +58,15 @@ in Git Bash after this line (change it if MSYS2 is not in `C:\msys64`):
 export PATH=/c/msys64/ucrt64/bin:/c/msys64/usr/bin:$PATH
 ```
 
-## Install
+## Install: the details
 
-**The way to play.** Download `ac0vr-0.1.x-setup.exe` from this repository's Releases and put it next to an ISO image of your own US disc (or tell it where the image or a folder with the disc's files is).
+For whoever wants more than the four steps above. The setup, `ac0vr-0.1.x-setup.exe` from this repository's Releases, goes next to an ISO image of your own US disc (or you tell it where the image or a folder with the disc's files is).
 
 1. **Windows may stop it:** the setup is not signed yet, so SmartScreen shows "Windows protected your PC". Click *More info*, then *Run anyway*.
 2. **The wizard:** the folder (`%LOCALAPPDATA%\Programs\ac0vr`, for your user only, no administrator rights), your disc (an image beside the setup is found by itself; the check reads the serial and a hash of the executable, and only the US disc passes), a desktop shortcut.
 3. **The first start** builds the game from your disc, in a window with a progress bar: a minute or two on 8 threads, and only once. The result stays on your PC and the disc stays where it is: it is read while you play, never copied.
 
-The setup holds no assets. If you have a folder `ac0vr-assets`, keep it next to the setup and the wizard copies it in; without one the game runs from the HUD view, with the original movies and ground textures.
-Assets can be downloaded from https://mega.nz/file/7lBzHSZR#QBPItkNZrza5PjCsPH4QmxhI62v3uO1trxn4-ORKMaI
-
+The setup holds no assets. If you have a folder `ac0vr-assets` (step 3 above), keep it next to the setup and the wizard copies it in, also on an install over an install; without one the game runs from the HUD view, with the original movies and ground textures.
 
 After that the shortcut starts the game at once; there is no Bash, MSYS2 or emulator to deal with. Your saves, your settings and the log are in `build\zero\` of the install folder (`saves\`, `ac5_settings.ini`, `logs\`), and the uninstaller asks before it touches them.
 
